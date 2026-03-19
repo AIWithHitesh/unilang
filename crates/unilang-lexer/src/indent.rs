@@ -19,6 +19,12 @@ pub struct IndentTracker {
     pending_indent: bool,
 }
 
+impl Default for IndentTracker {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl IndentTracker {
     pub fn new() -> Self {
         Self {
@@ -61,27 +67,27 @@ impl IndentTracker {
 
         let current = self.current_level();
 
-        if indent_level > current {
-            self.stack.push(indent_level);
-            IndentChange::Indent
-        } else if indent_level < current {
-            let mut dedent_count = 0u32;
-            while self.stack.len() > 1 && *self.stack.last().unwrap() > indent_level {
-                self.stack.pop();
-                dedent_count += 1;
+        match indent_level.cmp(&current) {
+            std::cmp::Ordering::Greater => {
+                self.stack.push(indent_level);
+                IndentChange::Indent
             }
-            // If the final level doesn't match exactly, it's an indentation error.
-            // We still emit the dedents for error recovery.
-            if *self.stack.last().unwrap() != indent_level {
-                // Inconsistent indentation — will be reported by the lexer.
-                // Push the actual level for recovery.
-                if indent_level > *self.stack.last().unwrap() {
+            std::cmp::Ordering::Less => {
+                let mut dedent_count = 0u32;
+                while self.stack.len() > 1 && *self.stack.last().unwrap() > indent_level {
+                    self.stack.pop();
+                    dedent_count += 1;
+                }
+                // If the final level doesn't match exactly, it's an indentation error.
+                // We still emit the dedents for error recovery.
+                if *self.stack.last().unwrap() != indent_level
+                    && indent_level > *self.stack.last().unwrap()
+                {
                     self.stack.push(indent_level);
                 }
+                IndentChange::Dedent(dedent_count)
             }
-            IndentChange::Dedent(dedent_count)
-        } else {
-            IndentChange::None
+            std::cmp::Ordering::Equal => IndentChange::None,
         }
     }
 

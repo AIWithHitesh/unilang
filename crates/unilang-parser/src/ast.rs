@@ -224,17 +224,42 @@ pub struct CompClause {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum BinOp {
-    Add, Sub, Mul, Div, FloorDiv, Mod, Pow,
-    Eq, NotEq, Lt, Gt, LtEq, GtEq,
-    And, Or,
-    BitAnd, BitOr, BitXor, LShift, RShift, UnsignedRShift,
-    In, NotIn, Is, IsNot, Instanceof,
+    Add,
+    Sub,
+    Mul,
+    Div,
+    FloorDiv,
+    Mod,
+    Pow,
+    Eq,
+    NotEq,
+    Lt,
+    Gt,
+    LtEq,
+    GtEq,
+    And,
+    Or,
+    BitAnd,
+    BitOr,
+    BitXor,
+    LShift,
+    RShift,
+    UnsignedRShift,
+    In,
+    NotIn,
+    Is,
+    IsNot,
+    Instanceof,
     NullCoalesce,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum UnaryOp {
-    Neg, Pos, Not, BitNot, LogicalNot,
+    Neg,
+    Pos,
+    Not,
+    BitNot,
+    LogicalNot,
 }
 
 // ── Type Expressions ──────────────────────────────────────
@@ -331,9 +356,7 @@ pub enum ImportStmt {
         names: ImportNames,
     },
     /// `import static foo.bar.Baz`
-    Static {
-        path: Vec<Spanned<String>>,
-    },
+    Static { path: Vec<Spanned<String>> },
 }
 
 #[derive(Debug, Clone)]

@@ -243,9 +243,11 @@ impl<'src> Lexer<'src> {
                     self.prev_token = Some(TokenKind::Newline);
                     let eof_dedents = self.indent.flush_eof();
                     for _ in 0..eof_dedents {
-                        self.queue.push(Token::new(TokenKind::Dedent, Span::empty(pos)));
+                        self.queue
+                            .push(Token::new(TokenKind::Dedent, Span::empty(pos)));
                     }
-                    self.queue.push(Token::new(TokenKind::Eof, Span::empty(pos)));
+                    self.queue
+                        .push(Token::new(TokenKind::Eof, Span::empty(pos)));
                     self.queue.reverse();
                     return Token::new(TokenKind::Newline, Span::empty(pos));
                 }
@@ -256,9 +258,11 @@ impl<'src> Lexer<'src> {
         let eof_dedents = self.indent.flush_eof();
         if eof_dedents > 0 {
             for _ in 0..eof_dedents {
-                self.queue.push(Token::new(TokenKind::Dedent, Span::empty(pos)));
+                self.queue
+                    .push(Token::new(TokenKind::Dedent, Span::empty(pos)));
             }
-            self.queue.push(Token::new(TokenKind::Eof, Span::empty(pos)));
+            self.queue
+                .push(Token::new(TokenKind::Eof, Span::empty(pos)));
             self.queue.reverse();
             let tok = self.queue.pop().unwrap();
             self.prev_token = Some(tok.kind);
@@ -359,7 +363,10 @@ impl<'src> Lexer<'src> {
                             "string starts here",
                         ),
                 );
-                let tok = Token::new(TokenKind::Error, Span::new(start, self.scanner.pos() as u32));
+                let tok = Token::new(
+                    TokenKind::Error,
+                    Span::new(start, self.scanner.pos() as u32),
+                );
                 self.prev_token = Some(tok.kind);
                 tok
             }
@@ -394,7 +401,10 @@ impl<'src> Lexer<'src> {
                             "string starts here",
                         ),
                 );
-                let tok = Token::new(TokenKind::Error, Span::new(start, self.scanner.pos() as u32));
+                let tok = Token::new(
+                    TokenKind::Error,
+                    Span::new(start, self.scanner.pos() as u32),
+                );
                 self.prev_token = Some(tok.kind);
                 tok
             }
@@ -402,8 +412,7 @@ impl<'src> Lexer<'src> {
     }
 
     fn scan_identifier(&mut self, start: u32) -> Token {
-        self.scanner
-            .eat_while(|c| c.is_alphanumeric() || c == '_');
+        self.scanner.eat_while(|c| c.is_alphanumeric() || c == '_');
         let text = self.scanner.slice_from(start as usize);
         let kind = keywords::lookup_keyword(text).unwrap_or(TokenKind::Identifier);
         let tok = Token::new(kind, Span::new(start, self.scanner.pos() as u32));
@@ -721,11 +730,7 @@ mod tests {
         let kinds = lex(r#""hello""#);
         assert_eq!(
             kinds,
-            vec![
-                TokenKind::StringLiteral,
-                TokenKind::Newline,
-                TokenKind::Eof,
-            ]
+            vec![TokenKind::StringLiteral, TokenKind::Newline, TokenKind::Eof,]
         );
     }
 
@@ -734,11 +739,7 @@ mod tests {
         let kinds = lex(r#"f"hello {name}""#);
         assert_eq!(
             kinds,
-            vec![
-                TokenKind::StringLiteral,
-                TokenKind::Newline,
-                TokenKind::Eof,
-            ]
+            vec![TokenKind::StringLiteral, TokenKind::Newline, TokenKind::Eof,]
         );
     }
 
@@ -777,11 +778,7 @@ mod tests {
         let kinds = lex("-> =>");
         assert_eq!(
             kinds,
-            vec![
-                TokenKind::Arrow,
-                TokenKind::FatArrow,
-                TokenKind::Eof,
-            ]
+            vec![TokenKind::Arrow, TokenKind::FatArrow, TokenKind::Eof,]
         );
     }
 
@@ -813,10 +810,7 @@ mod tests {
     #[test]
     fn test_ellipsis() {
         let kinds = lex("...");
-        assert_eq!(
-            kinds,
-            vec![TokenKind::Ellipsis, TokenKind::Eof]
-        );
+        assert_eq!(kinds, vec![TokenKind::Ellipsis, TokenKind::Eof]);
     }
 
     #[test]

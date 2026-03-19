@@ -113,7 +113,10 @@ mod tests {
     #[test]
     fn test_java_keywords() {
         assert_eq!(lookup_keyword("public"), Some(TokenKind::KwPublic));
-        assert_eq!(lookup_keyword("synchronized"), Some(TokenKind::KwSynchronized));
+        assert_eq!(
+            lookup_keyword("synchronized"),
+            Some(TokenKind::KwSynchronized)
+        );
         assert_eq!(lookup_keyword("instanceof"), Some(TokenKind::KwInstanceof));
     }
 

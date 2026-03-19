@@ -60,7 +60,9 @@ impl SourceFile {
             .get(idx + 1)
             .map(|&s| s as usize)
             .unwrap_or(self.content.len());
-        self.content[start..end].trim_end_matches('\n').trim_end_matches('\r')
+        self.content[start..end]
+            .trim_end_matches('\n')
+            .trim_end_matches('\r')
     }
 }
 

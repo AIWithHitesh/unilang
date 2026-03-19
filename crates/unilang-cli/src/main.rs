@@ -57,7 +57,7 @@ fn cmd_lex(path: &str) {
 
     for token in &tokens {
         let lc = file.line_col(token.span.start);
-        let text = if token.span.len() > 0 {
+        let text = if !token.span.is_empty() {
             file.slice(token.span)
         } else {
             ""
@@ -85,10 +85,7 @@ fn cmd_lex(path: &str) {
             }
         }
         eprintln!();
-        eprintln!(
-            "{} error(s) found.",
-            diagnostics.error_count()
-        );
+        eprintln!("{} error(s) found.", diagnostics.error_count());
         process::exit(1);
     }
 
@@ -96,7 +93,10 @@ fn cmd_lex(path: &str) {
 }
 
 fn cmd_parse(path: &str) {
-    eprintln!("Parser not yet implemented. Use `unilang lex {}` to tokenize.", path);
+    eprintln!(
+        "Parser not yet implemented. Use `unilang lex {}` to tokenize.",
+        path
+    );
     process::exit(1);
 }
 

@@ -31,8 +31,8 @@ pub enum TokenKind {
     TripleStringLiteral,
     BoolTrue,
     BoolFalse,
-    NullNone,   // None
-    NullNull,   // null
+    NullNone, // None
+    NullNull, // null
 
     // ── Identifier ────────────────────────────────────────
     Identifier,
@@ -111,26 +111,26 @@ pub enum TokenKind {
     KwConst,
 
     // ── Arithmetic Operators ─────────────────────────────
-    Plus,           // +
-    Minus,          // -
-    Star,           // *
-    Slash,          // /
-    DoubleSlash,    // //
-    Percent,        // %
-    DoubleStar,     // **
+    Plus,        // +
+    Minus,       // -
+    Star,        // *
+    Slash,       // /
+    DoubleSlash, // //
+    Percent,     // %
+    DoubleStar,  // **
 
     // ── Comparison Operators ─────────────────────────────
-    EqEq,           // ==
-    NotEq,          // !=
-    Lt,             // <
-    Gt,             // >
-    LtEq,           // <=
-    GtEq,           // >=
+    EqEq,  // ==
+    NotEq, // !=
+    Lt,    // <
+    Gt,    // >
+    LtEq,  // <=
+    GtEq,  // >=
 
     // ── Logical Operators ────────────────────────────────
-    AmpAmp,         // &&
-    PipePipe,       // ||
-    Bang,           // !
+    AmpAmp,   // &&
+    PipePipe, // ||
+    Bang,     // !
 
     // ── Bitwise Operators ────────────────────────────────
     Amp,            // &
@@ -142,20 +142,20 @@ pub enum TokenKind {
     UnsignedRShift, // >>>
 
     // ── Assignment Operators ─────────────────────────────
-    Eq,             // =
-    PlusEq,         // +=
-    MinusEq,        // -=
-    StarEq,         // *=
-    SlashEq,        // /=
-    DoubleSlashEq,  // //=
-    PercentEq,      // %=
-    DoubleStarEq,   // **=
-    AmpEq,          // &=
-    PipeEq,         // |=
-    CaretEq,        // ^=
-    LShiftEq,       // <<=
-    RShiftEq,       // >>=
-    ColonEq,        // :=  (walrus operator)
+    Eq,            // =
+    PlusEq,        // +=
+    MinusEq,       // -=
+    StarEq,        // *=
+    SlashEq,       // /=
+    DoubleSlashEq, // //=
+    PercentEq,     // %=
+    DoubleStarEq,  // **=
+    AmpEq,         // &=
+    PipeEq,        // |=
+    CaretEq,       // ^=
+    LShiftEq,      // <<=
+    RShiftEq,      // >>=
+    ColonEq,       // :=  (walrus operator)
 
     // ── Punctuation / Delimiters ─────────────────────────
     LParen,         // (
@@ -177,12 +177,12 @@ pub enum TokenKind {
     QuestionDot,    // ?.
     DoubleQuestion, // ??
     Hash,           // # (line comment starter in Python — handled as trivia,
-                    //    but token is available for directives)
+    //    but token is available for directives)
 
     // ── Synthetic Tokens ─────────────────────────────────
-    Indent,         // indentation level increased
-    Dedent,         // indentation level decreased
-    Newline,        // significant newline (statement terminator from ASI)
+    Indent,  // indentation level increased
+    Dedent,  // indentation level decreased
+    Newline, // significant newline (statement terminator from ASI)
 
     // ── Special ──────────────────────────────────────────
     Eof,
