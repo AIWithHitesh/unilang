@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<?eclipse version="3.4"?>
+<plugin>
+
+   <!-- Content Type for .uniL files -->
+   <extension point="org.eclipse.core.contenttype.contentTypes">
+      <content-type
+            id="org.unilang.eclipse.contentType"
+            name="UniLang Source File"
+            base-type="org.eclipse.core.runtime.text"
+            file-extensions="uniL"
+            priority="high"/>
+   </extension>
+
+   <!-- Editor registration -->
+   <extension point="org.eclipse.ui.editors">
+      <editor
+            id="org.unilang.eclipse.editor.UniLangEditor"
+            name="UniLang Editor"
+            icon="icons/unilang.png"
+            extensions="uniL"
+            contributorClass="org.eclipse.ui.texteditor.BasicTextEditorActionContributor"
+            class="org.unilang.eclipse.editor.UniLangEditor"
+            default="true">
+         <contentTypeBinding contentTypeId="org.unilang.eclipse.contentType"/>
+      </editor>
+   </extension>
+
+   <!-- Document setup participant for partitioning -->
+   <extension point="org.eclipse.core.filebuffers.documentSetup">
+      <participant
+            contentTypeId="org.unilang.eclipse.contentType"
+            class="org.unilang.eclipse.editor.UniLangDocumentProvider"/>
+   </extension>
+
+   <!-- File association icon -->
+   <extension point="org.eclipse.ui.ide.projectNatureImages">
+   </extension>
+
+   <!-- Presentation reconciler via editor configuration (handled in code) -->
+
+</plugin>

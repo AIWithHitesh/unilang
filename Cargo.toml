@@ -10,6 +10,7 @@ members = [
     "crates/unilang-lexer",
     "crates/unilang-parser",
     "crates/unilang-cli",
+    "crates/unilang-lsp",
 ]
 
 [workspace.package]
