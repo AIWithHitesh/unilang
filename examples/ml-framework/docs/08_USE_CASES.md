@@ -1,0 +1,245 @@
+# 8. Use Cases — What Can You Build?
+
+> **Goal**: Understand what problems this framework can solve and see practical examples.
+
+---
+
+## What UniNN is good at
+
+UniNN is designed for **structured/tabular data** — data you'd find in a database table or spreadsheet. This covers the vast majority of real-world business applications.
+
+```mermaid
+graph TD
+    A[Your Problem]
+    A -->|Structured Data<br/>Tables, CSVs, Databases| B["✅ UniNN<br/>This framework"]
+    A -->|Images| C["❌ Use CNNs<br/>(future addition)"]
+    A -->|Text/Language| D["❌ Use Transformers<br/>(future addition)"]
+    A -->|Time Series| E["⚠️ Possible<br/>with feature engineering"]
+    A -->|Tabular + Categories| F["✅ UniNN<br/>Sweet spot"]
+```
+
+---
+
+## Use Case 1: Customer Churn Prediction
+
+**Problem**: Predict which customers will stop using your service next month.
+
+**Input features**: Account age, login frequency, support tickets, feature usage, payment history.
+
+**Output**: Binary — `will_churn` or `will_stay`.
+
+```unilang
+model = UniNN(
+    inputDim=12,          // 12 customer features
+    hiddenDim=32,
+    outputDim=2,          // churn or stay
+    numBlocks=2,
+    task="classification"
+)
+loss_fn = CrossEntropyLoss()
+```
+
+**Why UniNN works well**: Customer behavior has both clear patterns (no login for 30 days = likely churn) and subtle interactions (high usage BUT many support tickets = frustrated power user). The gated residual blocks capture both.
+
+---
+
+## Use Case 2: Pricing Optimization
+
+**Problem**: Predict the optimal price for a product to maximize revenue.
+
+**Input features**: Product category, competitor prices, demand history, seasonality, inventory level.
+
+**Output**: A number — the recommended price.
+
+```unilang
+model = UniNN(
+    inputDim=15,
+    hiddenDim=64,
+    outputDim=1,          // single price value
+    numBlocks=3,
+    task="regression"     // predicting a number
+)
+loss_fn = MSELoss()
+```
+
+---
+
+## Use Case 3: Fraud Detection
+
+**Problem**: Flag suspicious transactions in real-time.
+
+**Input features**: Transaction amount, time of day, merchant category, distance from usual location, velocity (transactions per hour), device fingerprint.
+
+**Output**: Binary — `fraud` or `legitimate`.
+
+```unilang
+model = UniNN(
+    inputDim=20,
+    hiddenDim=64,
+    outputDim=2,
+    numBlocks=3,
+    dropoutRate=0.2,       // Higher dropout — fraud patterns are noisy
+    task="classification"
+)
+loss_fn = CrossEntropyLoss()
+
+// For fraud detection, use Java thread pool for real-time inference
+ExecutorService executor = Executors.newFixedThreadPool(8);
+// Process multiple transactions in parallel
+```
+
+**UniLang advantage**: Java threading enables **real-time parallel inference** — process hundreds of transactions simultaneously without GIL limitations.
+
+---
+
+## Use Case 4: Recommendation Scoring
+
+**Problem**: Score items by how likely a user is to engage with them.
+
+**Input features**: User demographics, item metadata, past interaction history (aggregated), time-based features.
+
+**Output**: Engagement probability (0 to 1).
+
+```unilang
+model = UniNN(
+    inputDim=30,
+    hiddenDim=64,
+    outputDim=1,
+    numBlocks=2,
+    task="regression"
+)
+loss_fn = BCELoss()    // Binary cross-entropy for probability output
+```
+
+---
+
+## Use Case 5: Quality Control / Anomaly Detection
+
+**Problem**: Detect defective products on a manufacturing line from sensor readings.
+
+**Input features**: Temperature, pressure, vibration, speed, humidity, material density (all from sensors).
+
+**Output**: `normal`, `warning`, `defective`.
+
+```unilang
+model = UniNN(
+    inputDim=8,           // 8 sensor readings
+    hiddenDim=32,
+    outputDim=3,          // normal, warning, defective
+    numBlocks=2,
+    task="classification"
+)
+```
+
+---
+
+## Use Case 6: Ensemble Predictions (Multiple Models)
+
+**Problem**: Your single model gets 88% accuracy. You want 92%.
+
+**Solution**: Train 3 models with different configurations and combine their predictions.
+
+```unilang
+// Train 3 different models
+model_small = UniNN(inputDim=10, hiddenDim=32, outputDim=3, numBlocks=2)
+model_medium = UniNN(inputDim=10, hiddenDim=64, outputDim=3, numBlocks=3)
+model_large = UniNN(inputDim=10, hiddenDim=128, outputDim=3, numBlocks=4)
+
+// ... train each model ...
+
+// Combine with parallel ensemble (Java threads!)
+from core.network import ParallelEnsemble
+ensemble = ParallelEnsemble(
+    models=[model_small, model_medium, model_large],
+    strategy="weighted"
+)
+ensemble.weights = [0.2, 0.5, 0.3]  // Weight by validation accuracy
+
+// All 3 models run in parallel on separate JVM threads
+result = ensemble.predict(new_data)
+```
+
+---
+
+## Use Case 7: Library Book Prediction (from our demo)
+
+This is exactly what we built in the `projects/library-mgmt/` system:
+
+**Problem**: Tag books with prediction labels based on historical data.
+
+**Input features (15)**: totalCheckouts, lateReturns, onTimeReturns, lateReturnRate, averageRating, totalRatings, totalCopies, availableCopies, pageCount, publishYear, bookAge, popularityScore, checkoutsPerCopy, ratingsPerCheckout, isEnglish.
+
+**Output (4 classes)**: `most_likely_booked`, `late_return`, `on_time_return`, `less_likely_booked`.
+
+---
+
+## Deciding Your Architecture
+
+```mermaid
+graph TD
+    A{How much data?}
+    A -->|< 1,000 samples| B["Small model<br/>hidden=16-32<br/>blocks=1-2"]
+    A -->|1K - 50K samples| C["Medium model<br/>hidden=32-64<br/>blocks=2-3"]
+    A -->|> 50K samples| D["Large model<br/>hidden=64-256<br/>blocks=3-5"]
+
+    B --> E{What task?}
+    C --> E
+    D --> E
+
+    E -->|Classification<br/>2 classes| F["outputDim=2<br/>BCELoss or CrossEntropy"]
+    E -->|Classification<br/>3+ classes| G["outputDim=N<br/>CrossEntropyLoss"]
+    E -->|Regression<br/>predict number| H["outputDim=1<br/>MSELoss or HuberLoss"]
+```
+
+## Step-by-Step: From Problem to Production
+
+```
+1. DEFINE THE PROBLEM
+   └─ What am I predicting? What data do I have?
+
+2. PREPARE DATA
+   ├─ Collect and clean data
+   ├─ Define features (inputs) and targets (outputs)
+   ├─ Normalize features
+   ├─ Split into train / validation / test
+   └─ Create Tensors
+
+3. BUILD MODEL
+   ├─ Choose architecture size (start small)
+   ├─ Choose loss function (match your task)
+   └─ Choose optimizer (Adam is usually fine)
+
+4. TRAIN
+   ├─ Run training loop
+   ├─ Monitor train loss AND validation loss
+   ├─ Save best checkpoint
+   └─ Stop when validation loss plateaus
+
+5. EVALUATE
+   ├─ Test on held-out test data
+   ├─ Check accuracy / error metrics
+   └─ Verify predictions make intuitive sense
+
+6. DEPLOY
+   ├─ model.save("model_v1.json")
+   ├─ Load in production: UniNN.load("model_v1.json")
+   └─ Use ParallelEnsemble for high-throughput inference
+```
+
+---
+
+## What this framework is NOT for (yet)
+
+| Problem | Better Tool | Why |
+|---------|------------|-----|
+| Image classification | CNN (PyTorch/TensorFlow) | Images need convolutional layers |
+| Text generation | Transformer (GPT-style) | Text needs attention mechanisms |
+| Speech recognition | RNN/Transformer | Sequential audio data |
+| Game playing | Reinforcement Learning | Needs reward-based training |
+| Very large datasets (100M+) | GPU-accelerated frameworks | CPU too slow at that scale |
+
+These are planned for future versions of the framework.
+
+---
+
+**Back to**: [Documentation Home →](./README.md)
