@@ -49,21 +49,79 @@ UniLang source files use the `.uniL` extension.
 
 ## Project Status
 
-UniLang is currently in the **planning and design phase**. We are actively developing:
+UniLang is in **active development**. Current progress:
 
-- [ ] Language specification
-- [ ] Lexer and parser
+- [x] Language specification
+- [x] Lexer (hand-written, full Python+Java token support)
+- [x] AST definitions
+- [x] CLI toolchain (`unilang lex`, `unilang parse`)
+- [x] Language Server Protocol (LSP) server
+- [x] IDE support (VS Code, JetBrains, Eclipse, standalone IDE)
+- [x] ML framework (custom Tensor, autograd, layers, optimizers)
+- [ ] Parser implementation
 - [ ] Semantic analyzer
 - [ ] Code generation (JVM bytecode + CPython interop)
 - [ ] Runtime with dual-VM bridge
 - [ ] Standard library
-- [ ] CLI toolchain
-- [ ] IDE support (VS Code extension / custom IDE)
+
+## UniLang ML Framework
+
+Build neural networks **from scratch** in UniLang — no PyTorch, no TensorFlow.
+
+```unilang
+from models.uniNN import UniNN
+from core.loss import CrossEntropyLoss
+from core.optimizers import Adam
+
+model = UniNN(inputDim=10, hiddenDim=64, outputDim=3, task="classification")
+loss_fn = CrossEntropyLoss()
+optimizer = Adam(model.parameters(), lr=0.001)
+
+for epoch in range(100):
+    model.zero_grad()
+    predictions = model.forward(X_train)
+    loss = loss_fn.compute(predictions, y_train)
+    loss.backward()
+    optimizer.step()
+```
+
+**What's included:**
+- Custom Tensor with autograd engine
+- Layers: Linear, BatchNorm, Dropout, Embedding, LSTM, Conv1D, MaxPool1D
+- Loss functions: MSE, CrossEntropy, BCE, Huber
+- Optimizers: SGD, Adam, RMSProp + LR schedulers
+- **UniNN** — original architecture with gated residual blocks and multi-scale feature mixing
+- Time series support via LSTM and Conv1D
+- Java thread pool for parallel ensemble inference
+
+[**ML Framework Documentation**](examples/ml-framework/docs/README.md) | [**Source Code**](examples/ml-framework/)
+
+## Examples
+
+| Example | Description |
+|---------|-------------|
+| [ML Framework](examples/ml-framework/) | Neural network framework built from scratch with custom Tensor, layers, and UniNN model |
+| [Library Management](examples/library-mgmt/) | Full-stack app with REST API, 10K book dataset, ML prediction engine, and dashboard |
+| [Hello World](examples/basic/hello.uniL) | Simple mixed Python/Java syntax |
+| [ML Pipeline](examples/ml/ml_pipeline.uniL) | Java thread pools + scikit-learn ML |
+| [Threading](examples/threading/concurrent_processing.uniL) | Multi-threaded data processing |
+| [Web Service](examples/advanced/web_service.uniL) | Spring Boot + Python ML REST API |
+
+## IDE & Tooling
+
+| Tool | Description |
+|------|-------------|
+| [VS Code Extension](tools/vscode-extension/) | Syntax highlighting, snippets, language config for `.uniL` files |
+| [JetBrains Plugin](tools/jetbrains-plugin/) | IntelliJ IDEA / PyCharm plugin with highlighting and completion |
+| [Eclipse Plugin](tools/eclipse-plugin/) | Eclipse editor with syntax coloring and content assist |
+| [UniLang IDE](tools/unilang-ide/) | Standalone Electron-based IDE with editor, file tree, terminal |
+| [Language Server](crates/unilang-lsp/) | LSP server for real-time diagnostics in any editor |
 
 ## Documentation
 
 | Document | Description |
 |----------|-------------|
+| [ML Framework Docs](examples/ml-framework/docs/README.md) | Learn to build neural networks from scratch |
 | [Product Requirements (PRD)](docs/planning/PRD.md) | Product vision, goals, and requirements |
 | [Architecture](docs/architecture/ARCHITECTURE.md) | System architecture and component design |
 | [Language Specification](docs/specifications/LANGUAGE_SPEC.md) | Formal language grammar and semantics |
