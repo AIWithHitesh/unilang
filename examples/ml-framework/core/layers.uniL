@@ -293,3 +293,374 @@ public class Embedding implements Layer {
     public String name():
         return f"Embedding({self.vocabSize}, {self.embeddingDim})"
 }
+
+// ═══════════════════════════════════════════════════════════════════
+// LSTM Layer — Long Short-Term Memory
+// For sequential/time series data. Processes one step at a time,
+// maintaining a hidden state (short-term memory) and cell state
+// (long-term memory) across steps.
+//
+// Only used when explicitly instantiated — zero cost if not used.
+// ═══════════════════════════════════════════════════════════════════
+
+public class LSTM implements Layer {
+    private int inputDim
+    private int hiddenDim
+    private int numLayers
+    private boolean returnSequence  // Return all steps or just last?
+
+    // Weights for each gate (per layer)
+    // Gates: forget (f), input (i), cell candidate (g), output (o)
+    // Combined into one matrix for efficiency: W_combined = [W_f; W_i; W_g; W_o]
+    private list weightsIH     // Input-to-hidden weights per layer
+    private list weightsHH     // Hidden-to-hidden weights per layer
+    private list biases        // Biases per layer
+
+    public LSTM(int inputDim, int hiddenDim, int numLayers = 1,
+                boolean returnSequence = false) {
+        this.inputDim = inputDim
+        this.hiddenDim = hiddenDim
+        this.numLayers = numLayers
+        this.returnSequence = returnSequence
+
+        this.weightsIH = []
+        this.weightsHH = []
+        this.biases = []
+
+        for layer in range(numLayers):
+            // First layer takes inputDim, subsequent layers take hiddenDim
+            int layerInput = inputDim if layer == 0 else hiddenDim
+
+            // Combined weight matrices for all 4 gates
+            // Shape: [layerInput, 4 * hiddenDim] for input-to-hidden
+            // Shape: [hiddenDim, 4 * hiddenDim] for hidden-to-hidden
+            wih = Tensor.xavier_uniform(layerInput, 4 * hiddenDim, requiresGrad=true)
+            wih.name = f"lstm.layer{layer}.weight_ih"
+
+            whh = Tensor.xavier_uniform(hiddenDim, 4 * hiddenDim, requiresGrad=true)
+            whh.name = f"lstm.layer{layer}.weight_hh"
+
+            // Bias: initialize forget gate bias to 1.0 (helps early training)
+            b = Tensor.zeros([1, 4 * hiddenDim], requiresGrad=true)
+            b.name = f"lstm.layer{layer}.bias"
+            // Set forget gate bias to 1.0 (indices hiddenDim to 2*hiddenDim)
+            for j in range(hiddenDim):
+                b.data[j] = 1.0  // forget gate bias
+
+            self.weightsIH.append(wih)
+            self.weightsHH.append(whh)
+            self.biases.append(b)
+    }
+
+    public Tensor forward(Tensor input) {
+        """Process a sequence through the LSTM.
+
+        Args:
+            input: Tensor of shape [batch_size, seq_len, input_dim]
+                   Stored as flat array in row-major order.
+                   OR [seq_len, input_dim] for single-sample.
+
+        Returns:
+            If returnSequence=true:  [batch_size, seq_len, hidden_dim]
+            If returnSequence=false: [batch_size, hidden_dim] (last step only)
+        """
+        // Determine batch and sequence dimensions
+        int batchSize, seqLen, featDim
+        boolean isBatched = len(input.shape) == 3
+
+        if isBatched:
+            batchSize = input.shape[0]
+            seqLen = input.shape[1]
+            featDim = input.shape[2]
+        else:
+            batchSize = 1
+            seqLen = input.shape[0]
+            featDim = input.shape[1]
+
+        // Storage for outputs at each time step
+        list allOutputs = []
+
+        // Process through each LSTM layer
+        Tensor currentInput = input
+
+        for (int layer = 0; layer < this.numLayers; layer++) {
+            Tensor wih = this.weightsIH[layer]
+            Tensor whh = this.weightsHH[layer]
+            Tensor bias = this.biases[layer]
+            int layerInput = wih.shape[0]
+
+            // Initialize hidden state and cell state to zeros
+            Tensor h = Tensor.zeros([batchSize, this.hiddenDim])
+            Tensor c = Tensor.zeros([batchSize, this.hiddenDim])
+
+            list layerOutputs = []
+
+            // Process each time step sequentially
+            for (int t = 0; t < seqLen; t++) {
+                // Extract input at time step t: x_t [batchSize, layerInput]
+                Tensor x_t = Tensor([batchSize, layerInput], requiresGrad=currentInput.requiresGrad)
+                for (int b_idx = 0; b_idx < batchSize; b_idx++) {
+                    for (int f = 0; f < layerInput; f++) {
+                        if isBatched:
+                            x_t.data[b_idx * layerInput + f] = \
+                                currentInput.data[b_idx * seqLen * layerInput + t * layerInput + f]
+                        else:
+                            x_t.data[b_idx * layerInput + f] = \
+                                currentInput.data[t * layerInput + f]
+                    }
+                }
+
+                // Compute all four gates in one matrix multiply:
+                // gates = x_t @ W_ih + h @ W_hh + bias
+                // Shape: [batchSize, 4 * hiddenDim]
+                Tensor gates_x = x_t.matmul(wih)
+                Tensor gates_h = h.matmul(whh)
+                Tensor gates = gates_x.add(gates_h).add(bias)
+
+                // Split into 4 gates, each [batchSize, hiddenDim]
+                int hd = this.hiddenDim
+
+                // forget gate: σ(gates[:, 0:hd])
+                Tensor f_gate = Tensor([batchSize, hd], requiresGrad=true)
+                // input gate:  σ(gates[:, hd:2*hd])
+                Tensor i_gate = Tensor([batchSize, hd], requiresGrad=true)
+                // cell candidate: tanh(gates[:, 2*hd:3*hd])
+                Tensor g_gate = Tensor([batchSize, hd], requiresGrad=true)
+                // output gate: σ(gates[:, 3*hd:4*hd])
+                Tensor o_gate = Tensor([batchSize, hd], requiresGrad=true)
+
+                for (int b_idx = 0; b_idx < batchSize; b_idx++) {
+                    for (int j = 0; j < hd; j++) {
+                        int base = b_idx * 4 * hd
+                        f_gate.data[b_idx * hd + j] = gates.data[base + j]
+                        i_gate.data[b_idx * hd + j] = gates.data[base + hd + j]
+                        g_gate.data[b_idx * hd + j] = gates.data[base + 2 * hd + j]
+                        o_gate.data[b_idx * hd + j] = gates.data[base + 3 * hd + j]
+                    }
+                }
+
+                // Apply activations
+                f_gate = f_gate.sigmoid()   // Forget gate: what to discard from cell
+                i_gate = i_gate.sigmoid()   // Input gate: what new info to store
+                g_gate = g_gate.tanh()      // Cell candidate: new information
+                o_gate = o_gate.sigmoid()   // Output gate: what to expose
+
+                // Update cell state: c = f * c_prev + i * g
+                c = f_gate.mul(c).add(i_gate.mul(g_gate))
+
+                // Update hidden state: h = o * tanh(c)
+                h = o_gate.mul(c.tanh())
+
+                layerOutputs.append(h.clone())
+            }
+
+            // Prepare input for next layer (or final output)
+            if this.returnSequence or layer < this.numLayers - 1:
+                // Pack all time steps back into [batchSize, seqLen, hiddenDim]
+                currentInput = Tensor([batchSize, seqLen, this.hiddenDim],
+                                       requiresGrad=currentInput.requiresGrad)
+                for (int t = 0; t < seqLen; t++) {
+                    Tensor h_t = layerOutputs[t]
+                    for (int b_idx = 0; b_idx < batchSize; b_idx++) {
+                        for (int j = 0; j < this.hiddenDim; j++) {
+                            currentInput.data[b_idx * seqLen * this.hiddenDim + t * this.hiddenDim + j] = \
+                                h_t.data[b_idx * this.hiddenDim + j]
+                        }
+                    }
+                }
+            else:
+                // Return only last hidden state
+                currentInput = layerOutputs[seqLen - 1]
+
+            allOutputs = layerOutputs
+        }
+
+        if this.returnSequence:
+            return currentInput   // [batchSize, seqLen, hiddenDim]
+        else:
+            return currentInput   // [batchSize, hiddenDim]
+    }
+
+    public list parameters():
+        params = []
+        for layer in range(self.numLayers):
+            params.append(self.weightsIH[layer])
+            params.append(self.weightsHH[layer])
+            params.append(self.biases[layer])
+        return params
+
+    public String name():
+        layers_str = f", layers={self.numLayers}" if self.numLayers > 1 else ""
+        seq_str = ", seq=true" if self.returnSequence else ""
+        return f"LSTM({self.inputDim} → {self.hiddenDim}{layers_str}{seq_str})"
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// Conv1D Layer — 1D Convolution
+// Slides a kernel across a sequence to detect local patterns.
+// Useful for time series, signal processing, and feature extraction.
+//
+// Only used when explicitly instantiated — zero cost if not used.
+// ═══════════════════════════════════════════════════════════════════
+
+public class Conv1D implements Layer {
+    private int inChannels
+    private int outChannels
+    private int kernelSize
+    private int stride
+    private int padding
+    private Tensor weights      // [outChannels, inChannels, kernelSize]
+    private Tensor bias         // [1, outChannels]
+
+    public Conv1D(int inChannels, int outChannels, int kernelSize = 3,
+                  int stride = 1, int padding = 0) {
+        this.inChannels = inChannels
+        this.outChannels = outChannels
+        this.kernelSize = kernelSize
+        this.stride = stride
+        this.padding = padding
+
+        // Initialize weights: He normal scaled for conv
+        double std = math.sqrt(2.0 / (inChannels * kernelSize))
+        int totalWeights = outChannels * inChannels * kernelSize
+        this.weights = Tensor([outChannels, inChannels * kernelSize], requiresGrad=true)
+        this.weights.name = "conv1d.weight"
+        for i in range(totalWeights):
+            this.weights.data[i] = random.gauss(0.0, std)
+
+        this.bias = Tensor.zeros([1, outChannels], requiresGrad=true)
+        this.bias.name = "conv1d.bias"
+    }
+
+    public Tensor forward(Tensor input) {
+        """Apply 1D convolution across the sequence dimension.
+
+        Args:
+            input: [batch_size, seq_len, in_channels]
+
+        Returns:
+            output: [batch_size, out_seq_len, out_channels]
+            where out_seq_len = (seq_len + 2*padding - kernel_size) / stride + 1
+        """
+        int batchSize, seqLen, channels
+        boolean isBatched = len(input.shape) == 3
+
+        if isBatched:
+            batchSize = input.shape[0]
+            seqLen = input.shape[1]
+            channels = input.shape[2]
+        else:
+            batchSize = 1
+            seqLen = input.shape[0]
+            channels = input.shape[1]
+
+        assert channels == self.inChannels, \
+            f"Conv1D: expected {self.inChannels} input channels, got {channels}"
+
+        // Calculate output sequence length
+        int outLen = (seqLen + 2 * self.padding - self.kernelSize) // self.stride + 1
+        assert outLen > 0, \
+            f"Conv1D: kernel_size={self.kernelSize} is too large for seq_len={seqLen}"
+
+        Tensor output = Tensor([batchSize, outLen, self.outChannels],
+                                requiresGrad=(input.requiresGrad or self.weights.requiresGrad))
+
+        // Perform convolution
+        for (int b = 0; b < batchSize; b++) {
+            for (int outPos = 0; outPos < outLen; outPos++) {
+                int startPos = outPos * self.stride - self.padding
+
+                // For each output channel (each kernel/filter)
+                for (int oc = 0; oc < self.outChannels; oc++) {
+                    double sum = 0.0;
+
+                    // Slide kernel across input channels and positions
+                    for (int k = 0; k < self.kernelSize; k++) {
+                        int inputPos = startPos + k;
+
+                        // Skip if outside input (padding region = 0)
+                        if (inputPos < 0 || inputPos >= seqLen) continue;
+
+                        for (int ic = 0; ic < self.inChannels; ic++) {
+                            double inputVal;
+                            if (isBatched) {
+                                inputVal = input.data[b * seqLen * channels + inputPos * channels + ic];
+                            } else {
+                                inputVal = input.data[inputPos * channels + ic];
+                            }
+
+                            double weightVal = self.weights.data[oc * self.inChannels * self.kernelSize + k * self.inChannels + ic];
+                            sum += inputVal * weightVal;
+                        }
+                    }
+
+                    // Add bias
+                    sum += self.bias.data[oc];
+
+                    // Store output
+                    output.data[b * outLen * self.outChannels + outPos * self.outChannels + oc] = sum;
+                }
+            }
+        }
+
+        return output
+    }
+
+    public list parameters():
+        return [self.weights, self.bias]
+
+    public String name():
+        pad_str = f", pad={self.padding}" if self.padding > 0 else ""
+        stride_str = f", stride={self.stride}" if self.stride > 1 else ""
+        return f"Conv1D({self.inChannels}→{self.outChannels}, k={self.kernelSize}{stride_str}{pad_str})"
+}
+
+// ═══════════════════════════════════════════════════════════════════
+// MaxPool1D — Downsamples a sequence by taking the max in each window
+// ═══════════════════════════════════════════════════════════════════
+
+public class MaxPool1D implements Layer {
+    private int kernelSize
+    private int stride
+
+    public MaxPool1D(int kernelSize = 2, int stride = 0) {
+        this.kernelSize = kernelSize
+        this.stride = stride if stride > 0 else kernelSize  // Default stride = kernel size
+    }
+
+    public Tensor forward(Tensor input) {
+        """Downsample by taking max in each window.
+        input:  [batch_size, seq_len, channels]
+        output: [batch_size, out_len, channels]
+        """
+        int batchSize = input.shape[0]
+        int seqLen = input.shape[1]
+        int channels = input.shape[2]
+        int outLen = (seqLen - self.kernelSize) // self.stride + 1
+
+        Tensor output = Tensor([batchSize, outLen, channels], requiresGrad=input.requiresGrad)
+
+        for (int b = 0; b < batchSize; b++) {
+            for (int outPos = 0; outPos < outLen; outPos++) {
+                int startPos = outPos * this.stride;
+                for (int c = 0; c < channels; c++) {
+                    double maxVal = -1e30;
+                    for (int k = 0; k < this.kernelSize; k++) {
+                        int pos = startPos + k;
+                        double val = input.data[b * seqLen * channels + pos * channels + c];
+                        if (val > maxVal) maxVal = val;
+                    }
+                    output.data[b * outLen * channels + outPos * channels + c] = maxVal;
+                }
+            }
+        }
+
+        return output
+    }
+
+    public list parameters():
+        return []
+
+    public String name():
+        return f"MaxPool1D(k={self.kernelSize}, stride={self.stride})"
+}

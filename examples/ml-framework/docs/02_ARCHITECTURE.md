@@ -70,7 +70,10 @@ examples/ml-framework/
 │   │
 │   ├── layers.uniL               Building blocks for neural networks.
 │   │                              Each layer transforms data in a
-│   │                              specific way.
+│   │                              specific way. Includes:
+│   │                              - Linear, BatchNorm, Dropout, Embedding
+│   │                              - LSTM (sequential/time series data)
+│   │                              - Conv1D, MaxPool1D (local pattern detection)
 │   │
 │   ├── network.uniL              Containers that organize layers
 │   │                              into a complete model.
@@ -286,6 +289,34 @@ Different problems need different error measurements:
 | BCELoss | Binary | Yes/no decisions (spam/not spam) |
 | HuberLoss | Robust regression | When data has outliers |
 
+### Why LSTM? (for sequential data)
+
+Linear layers treat each input as an independent bag of features — they have no concept of order. But time series data (stock prices, sensor readings, user sessions) has **sequential dependencies**: what happened 5 minutes ago affects what happens now.
+
+LSTM maintains a **memory cell** that selectively remembers and forgets information across time steps:
+
+```
+Linear layer sees:     [temp=22, temp=25, temp=21] → treats as 3 independent numbers
+LSTM sees:             temp=22 → temp=25 → temp=21 → "rising then falling — a peak"
+```
+
+LSTM is only used when you explicitly create it. If your data is tabular (no time ordering), use Linear layers — they're faster and simpler.
+
+### Why Conv1D? (for local patterns in sequences)
+
+Conv1D is a lighter alternative to LSTM. Instead of remembering everything sequentially, it slides a small window and asks "does this local pattern match?":
+
+```
+LSTM:   Reads entire sequence step by step. Slow but captures long-range patterns.
+Conv1D: Slides a window. Fast but only sees local patterns (kernel_size steps).
+```
+
+Use Conv1D when patterns are local (spikes, dips, short motifs). Use LSTM when distant past matters.
+
+### Why MaxPool1D?
+
+After Conv1D detects patterns, MaxPool1D downsamples by keeping only the strongest signal in each window. This reduces sequence length and computation while preserving the most important features.
+
 ### Why multiple optimizers?
 
 | Optimizer | Behavior | When to Use |
@@ -293,6 +324,33 @@ Different problems need different error measurements:
 | SGD | Simple, predictable | When you have lots of data and time |
 | Adam | Adapts learning rate per parameter | Default choice — works well on most problems |
 | RMSProp | Adapts to recent gradient magnitude | Good for noisy or non-stationary problems |
+
+---
+
+## Data Flow — Time Series Model
+
+When building a time series model, data flows differently:
+
+```mermaid
+graph LR
+    A["Sequence<br/>[batch, 30 steps, 5 features]"] --> B["Conv1D<br/>Detect local patterns"]
+    B --> C["MaxPool1D<br/>Downsample"]
+    C --> D["LSTM<br/>Capture temporal dependencies"]
+    D --> E["Linear<br/>Final prediction"]
+    E --> F["Output<br/>[next value]"]
+```
+
+```unilang
+// Time series model — explicitly using sequence layers
+model = Sequential("stock_predictor")
+model.add(Conv1D(inChannels=5, outChannels=16, kernelSize=3))
+model.add(MaxPool1D(kernelSize=2))
+model.add(LSTM(inputDim=16, hiddenDim=32))
+model.add(Linear(32, 1))
+
+// Tabular model — no sequence layers involved, zero overhead
+model = UniNN(inputDim=10, hiddenDim=64, outputDim=3, task="classification")
+```
 
 ---
 

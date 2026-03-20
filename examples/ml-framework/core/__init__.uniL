@@ -2,7 +2,7 @@
 // All components built from scratch. Zero external ML dependencies.
 
 from core.tensor import Tensor
-from core.layers import Linear, ReLU, Sigmoid, Tanh, LeakyReLU, Softmax, Dropout, BatchNorm, Embedding
+from core.layers import Linear, ReLU, Sigmoid, Tanh, LeakyReLU, Softmax, Dropout, BatchNorm, Embedding, LSTM, Conv1D, MaxPool1D
 from core.network import Sequential, ParallelEnsemble
 from core.loss import MSELoss, CrossEntropyLoss, BCELoss, HuberLoss
 from core.optimizers import SGD, Adam, RMSProp, StepLRScheduler, CosineAnnealingScheduler

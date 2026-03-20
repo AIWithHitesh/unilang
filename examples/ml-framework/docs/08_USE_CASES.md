@@ -4,18 +4,23 @@
 
 ---
 
-## What UniNN is good at
+## What the framework supports
 
-UniNN is designed for **structured/tabular data** — data you'd find in a database table or spreadsheet. This covers the vast majority of real-world business applications.
+The framework handles two major data types:
+
+- **Tabular/structured data** (UniNN) — database rows, spreadsheets, feature vectors
+- **Sequential/time series data** (LSTM + Conv1D) — ordered data where time matters
 
 ```mermaid
 graph TD
     A[Your Problem]
-    A -->|Structured Data<br/>Tables, CSVs, Databases| B["✅ UniNN<br/>This framework"]
-    A -->|Images| C["❌ Use CNNs<br/>(future addition)"]
-    A -->|Text/Language| D["❌ Use Transformers<br/>(future addition)"]
-    A -->|Time Series| E["⚠️ Possible<br/>with feature engineering"]
+    A -->|Structured Data<br/>Tables, CSVs, Databases| B["✅ UniNN<br/>Gated residual blocks"]
+    A -->|Time Series<br/>Sequences, Sensors| C["✅ LSTM + Conv1D<br/>Sequential layers"]
+    A -->|Images| D["❌ Use CNNs<br/>(future addition)"]
+    A -->|Text/Language| E["❌ Use Transformers<br/>(future addition)"]
     A -->|Tabular + Categories| F["✅ UniNN<br/>Sweet spot"]
+    A -->|Short Sequences<br/>&lt; 50 steps| G["✅ Conv1D<br/>Fast local patterns"]
+    A -->|Long Sequences<br/>&gt; 50 steps| H["✅ LSTM<br/>Long-range memory"]
 ```
 
 ---
@@ -173,6 +178,82 @@ This is exactly what we built in the `projects/library-mgmt/` system:
 
 ---
 
+## Use Case 8: Stock Price Prediction (Time Series — LSTM)
+
+**Problem**: Predict tomorrow's closing price based on the last 30 days of market data.
+
+**Input**: Sequence of 30 time steps, each with 6 features (open, high, low, close, volume, moving_avg).
+
+**Output**: Next day's predicted closing price.
+
+```unilang
+from core.layers import LSTM, Linear
+from core.network import Sequential
+
+model = Sequential("stock_predictor")
+model.add(LSTM(inputDim=6, hiddenDim=64, numLayers=2))  // 2-layer LSTM
+model.add(Linear(64, 1))                                 // Predict one value
+
+loss_fn = MSELoss()     // Regression — predicting a number
+optimizer = Adam(model.parameters(), lr=0.001)
+
+// Input shape: [batch_size, 30, 6] — 30 days, 6 features each
+// Output shape: [batch_size, 1] — predicted price
+```
+
+**Why LSTM**: Stock prices have long-range dependencies — a pattern from 2 weeks ago can affect today. LSTM's memory cell tracks these across 30 time steps.
+
+---
+
+## Use Case 9: Sensor Anomaly Detection (Time Series — Conv1D)
+
+**Problem**: Detect anomalies in IoT sensor data (temperature, pressure, vibration) on a manufacturing line.
+
+**Input**: Sliding window of 20 readings, each with 4 sensor channels.
+
+**Output**: Binary — `normal` or `anomaly`.
+
+```unilang
+from core.layers import Conv1D, MaxPool1D, Linear, ReLU, Sigmoid
+from core.network import Sequential
+
+model = Sequential("anomaly_detector")
+model.add(Conv1D(inChannels=4, outChannels=16, kernelSize=5, padding=2))
+model.add(ReLU())
+model.add(MaxPool1D(kernelSize=2))          // 20 steps → 10 steps
+model.add(Conv1D(inChannels=16, outChannels=32, kernelSize=3, padding=1))
+model.add(ReLU())
+model.add(MaxPool1D(kernelSize=2))          // 10 steps → 5 steps
+// Flatten: 5 × 32 = 160 features
+model.add(Linear(160, 1))
+model.add(Sigmoid())                         // Anomaly probability
+
+loss_fn = BCELoss()     // Binary classification
+```
+
+**Why Conv1D**: Anomalies are local patterns (sudden spike, rapid drop). Conv1D's sliding window detects these efficiently without the overhead of LSTM.
+
+---
+
+## Use Case 10: Energy Demand Forecasting (Time Series — Hybrid)
+
+**Problem**: Predict next hour's energy demand from 24 hours of historical readings.
+
+```unilang
+// Hybrid: Conv1D for local patterns + LSTM for temporal trends
+model = Sequential("energy_forecast")
+model.add(Conv1D(inChannels=3, outChannels=16, kernelSize=3))   // Local features
+model.add(ReLU())
+model.add(LSTM(inputDim=16, hiddenDim=32))                      // Temporal memory
+model.add(Linear(32, 1))                                         // Predict demand
+
+loss_fn = HuberLoss(delta=1.0)   // Robust to demand spikes (outliers)
+```
+
+**Why hybrid**: Conv1D catches short patterns (morning ramp-up), LSTM captures longer cycles (weekday vs weekend).
+
+---
+
 ## Deciding Your Architecture
 
 ```mermaid
@@ -232,13 +313,17 @@ graph TD
 
 | Problem | Better Tool | Why |
 |---------|------------|-----|
-| Image classification | CNN (PyTorch/TensorFlow) | Images need convolutional layers |
+| Image classification | 2D CNNs (PyTorch/TensorFlow) | Images need 2D convolutional layers |
 | Text generation | Transformer (GPT-style) | Text needs attention mechanisms |
-| Speech recognition | RNN/Transformer | Sequential audio data |
 | Game playing | Reinforcement Learning | Needs reward-based training |
 | Very large datasets (100M+) | GPU-accelerated frameworks | CPU too slow at that scale |
 
 These are planned for future versions of the framework.
+
+**Now supported** (that previously wasn't):
+- Time series forecasting (LSTM)
+- Sensor/signal anomaly detection (Conv1D)
+- Sequential pattern recognition (LSTM + Conv1D hybrid)
 
 ---
 

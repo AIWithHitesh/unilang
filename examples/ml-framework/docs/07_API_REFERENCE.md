@@ -133,6 +133,63 @@ output = embed.forward(token_ids)   // [batch×seq_len] → [batch×seq_len, 128
 
 Lookup table mapping integer IDs to dense vectors.
 
+### LSTM (Long Short-Term Memory)
+
+```unilang
+lstm = LSTM(inputDim=5, hiddenDim=32, numLayers=2, returnSequence=false)
+output = lstm.forward(input)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `inputDim` | int | required | Number of features per time step |
+| `hiddenDim` | int | required | Hidden state size (output dimension) |
+| `numLayers` | int | 1 | Number of stacked LSTM layers |
+| `returnSequence` | bool | false | If true, return all time steps; if false, return only last |
+
+**Input shape**: `[batch_size, seq_len, input_dim]` or `[seq_len, input_dim]`
+
+**Output shape**:
+- `returnSequence=false`: `[batch_size, hidden_dim]` (last step's hidden state)
+- `returnSequence=true`: `[batch_size, seq_len, hidden_dim]` (all steps)
+
+**Internal gates**: forget, input, cell candidate, output — all computed via combined matrix multiply for efficiency. Forget gate bias initialized to 1.0 for stable early training.
+
+### Conv1D (1D Convolution)
+
+```unilang
+conv = Conv1D(inChannels=5, outChannels=16, kernelSize=3, stride=1, padding=0)
+output = conv.forward(input)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `inChannels` | int | required | Number of input channels/features |
+| `outChannels` | int | required | Number of output channels (filters) |
+| `kernelSize` | int | 3 | Width of the sliding window |
+| `stride` | int | 1 | Step size between window positions |
+| `padding` | int | 0 | Zero-padding added to both sides |
+
+**Input shape**: `[batch_size, seq_len, in_channels]`
+
+**Output shape**: `[batch_size, out_seq_len, out_channels]` where `out_seq_len = (seq_len + 2*padding - kernel_size) / stride + 1`
+
+### MaxPool1D (1D Max Pooling)
+
+```unilang
+pool = MaxPool1D(kernelSize=2, stride=0)   // stride defaults to kernelSize
+output = pool.forward(input)
+```
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `kernelSize` | int | 2 | Window size |
+| `stride` | int | kernelSize | Step size (defaults to non-overlapping windows) |
+
+**Input/Output**: `[batch_size, seq_len, channels]` → `[batch_size, out_len, channels]`
+
+No learnable parameters — pure downsampling.
+
 ---
 
 ## core/network.uniL — Network Containers

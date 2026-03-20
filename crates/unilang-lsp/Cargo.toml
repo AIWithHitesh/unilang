@@ -1,0 +1,21 @@
+[package]
+name = "unilang-lsp"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Language Server Protocol implementation for UniLang"
+
+[[bin]]
+name = "unilang-lsp"
+path = "src/main.rs"
+
+[dependencies]
+unilang-lexer = { path = "../unilang-lexer" }
+unilang-common = { path = "../unilang-common" }
+
+tower-lsp = "0.20"
+tokio = { version = "1", features = ["full"] }
+serde_json = "1"
+serde = { version = "1", features = ["derive"] }
+ropey = "1"

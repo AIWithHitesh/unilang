@@ -334,6 +334,75 @@ graph LR
     I -->|update weights| E
 ```
 
+## Sequence Layers — For Time Series and Ordered Data
+
+Not all data is a flat table of features. Some data has an **order that matters**:
+
+- Stock prices over 30 days
+- Temperature readings every hour
+- Steps in a user session
+
+For these, we have two specialized layers:
+
+### LSTM — Long Short-Term Memory
+
+An LSTM reads data **one step at a time** and maintains a memory of what it has seen:
+
+```
+Time step 1        Time step 2        Time step 3
+[price=100]        [price=105]        [price=103]
+     │                  │                  │
+     ▼                  ▼                  ▼
+┌─────────┐       ┌─────────┐       ┌─────────┐
+│  LSTM   │──────→│  LSTM   │──────→│  LSTM   │──→ output
+│  Cell   │ memory│  Cell   │ memory│  Cell   │
+└─────────┘       └─────────┘       └─────────┘
+
+"I saw 100,         "100 then 105,     "Going up then
+ starting fresh"     trending up"       down — volatility"
+```
+
+**Analogy**: Like reading a book. You don't just see the current word — you remember the plot so far. The LSTM decides what's worth remembering (input gate), what to forget (forget gate), and what to say (output gate).
+
+```unilang
+lstm = LSTM(inputDim=5, hiddenDim=32, numLayers=2)
+output = lstm.forward(sequence_data)   // Processes step by step
+```
+
+### Conv1D — 1D Convolution
+
+Conv1D slides a small window across the sequence, detecting **local patterns**:
+
+```
+Input sequence: [v1, v2, v3, v4, v5, v6, v7, v8]
+
+Kernel (size=3):    ┌─────────┐
+                    │ k1 k2 k3│
+                    └─────────┘
+
+Slide →  [v1,v2,v3] → feature_1
+         [v2,v3,v4] → feature_2
+         [v3,v4,v5] → feature_3
+         ...
+```
+
+**Analogy**: Like a metal detector sweeping across a beach. It only looks at a small area at a time, but detects patterns wherever they appear.
+
+```unilang
+conv = Conv1D(inChannels=5, outChannels=16, kernelSize=3)
+output = conv.forward(sequence_data)   // Detects local patterns
+```
+
+### When to use which
+
+| Layer | Best for | Speed |
+|-------|----------|-------|
+| **Linear** (default) | Tables, spreadsheets, independent records | Fast |
+| **Conv1D** | Short patterns in sequences (< 50 steps) | Fast |
+| **LSTM** | Long sequences where distant past matters | Slower (sequential) |
+
+---
+
 ## Summary
 
 | Concept | What it is | Analogy | Our Code |
@@ -342,6 +411,8 @@ graph LR
 | **Neuron** | Weighted sum + bias + activation | A tiny voter weighing evidence | Inside `Linear` layer |
 | **Linear Layer** | Many neurons computed at once via matrix multiplication | A panel of voters | `core/layers.uniL` |
 | **Activation** | Non-linear function (ReLU, sigmoid, softmax) | A decision threshold | `core/layers.uniL` |
+| **LSTM** | Processes sequences step-by-step with memory | Reading a book — remembers the plot | `core/layers.uniL` |
+| **Conv1D** | Detects local patterns by sliding a window | A metal detector sweeping a beach | `core/layers.uniL` |
 | **Network** | Layers stacked in sequence | An assembly line | `core/network.uniL` |
 | **Loss** | Measures prediction error | A score card | `core/loss.uniL` |
 | **Optimizer** | Updates weights to reduce loss | A tuning knob | `core/optimizers.uniL` |

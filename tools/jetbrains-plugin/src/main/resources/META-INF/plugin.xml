@@ -1,0 +1,45 @@
+<idea-plugin>
+    <id>org.unilang.intellij</id>
+    <name>UniLang</name>
+    <version>0.1.0</version>
+    <vendor>UniLang Community</vendor>
+
+    <description><![CDATA[
+        UniLang language support for JetBrains IDEs.<br/>
+        Provides syntax highlighting, error checking, and code completion for UniLang,
+        a language that combines Python and Java syntax in <code>.uniL</code> files.
+        <ul>
+            <li>Syntax highlighting for Python + Java keywords, strings, comments, and more</li>
+            <li>Real-time error annotations (unmatched brackets, bad escape sequences, TODO/FIXME)</li>
+            <li>Code completion for keywords, types, and common patterns</li>
+        </ul>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.lang</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <fileType
+                name="UniLang"
+                implementationClass="org.unilang.intellij.UniLangFileType"
+                fieldName="INSTANCE"
+                language="UniLang"
+                extensions="uniL"/>
+
+        <lang.parserDefinition
+                language="UniLang"
+                implementationClass="org.unilang.intellij.parser.UniLangParserDefinition"/>
+
+        <lang.syntaxHighlighterFactory
+                language="UniLang"
+                implementationClass="org.unilang.intellij.syntax.UniLangSyntaxHighlighterFactory"/>
+
+        <annotator
+                language="UniLang"
+                implementationClass="org.unilang.intellij.annotator.UniLangAnnotator"/>
+
+        <completion.contributor
+                language="UniLang"
+                implementationClass="org.unilang.intellij.completion.UniLangCompletionContributor"/>
+    </extensions>
+</idea-plugin>

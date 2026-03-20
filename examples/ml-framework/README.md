@@ -10,7 +10,8 @@ A neural network framework built **entirely from scratch** in UniLang — no PyT
 ├─────────────────────────────────────────────────────────┤
 │  core/tensor.uniL     — Tensor with autograd engine     │
 │  core/layers.uniL     — Neurons, Linear, BatchNorm,     │
-│                         Dropout, Embedding               │
+│                         Dropout, Embedding, LSTM,        │
+│                         Conv1D, MaxPool1D                │
 │  core/network.uniL    — Sequential, ParallelEnsemble    │
 │  core/loss.uniL       — MSE, CrossEntropy, BCE, Huber   │
 │  core/optimizers.uniL — SGD, Adam, RMSProp + schedulers │
@@ -97,6 +98,32 @@ ensemble = ParallelEnsemble(
 result = ensemble.predict(input)
 ```
 
+### Time series prediction (LSTM)
+
+```unilang
+from core.layers import LSTM, Linear
+from core.network import Sequential
+
+model = Sequential("stock_predictor")
+model.add(LSTM(inputDim=6, hiddenDim=64, numLayers=2))
+model.add(Linear(64, 1))
+
+// Input: [batch, 30 days, 6 features] → Output: [batch, 1 predicted price]
+```
+
+### Sensor anomaly detection (Conv1D)
+
+```unilang
+from core.layers import Conv1D, MaxPool1D, Linear, ReLU, Sigmoid
+
+model = Sequential("anomaly_detector")
+model.add(Conv1D(inChannels=4, outChannels=16, kernelSize=5, padding=2))
+model.add(ReLU())
+model.add(MaxPool1D(kernelSize=2))
+model.add(Linear(160, 1))
+model.add(Sigmoid())
+```
+
 ## Key Design Decisions
 
 | Decision | Rationale |
@@ -125,6 +152,9 @@ result = ensemble.predict(input)
 - `Dropout` — Inverted dropout regularization
 - `BatchNorm` — Batch normalization with running statistics
 - `Embedding` — Token embedding lookup table
+- `LSTM` — Long Short-Term Memory for sequential/time series data (multi-layer, forget gate bias init)
+- `Conv1D` — 1D convolution for local pattern detection in sequences
+- `MaxPool1D` — 1D max pooling for downsampling sequences
 
 ### Loss Functions (`core/loss.uniL`)
 - `MSELoss` — Mean squared error (regression)

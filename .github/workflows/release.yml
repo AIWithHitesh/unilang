@@ -1,0 +1,239 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g., 0.1.0)'
+        required: true
+        default: '0.1.0'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # ═══════════════════════════════════════════════════════════
+  # Build UniLang CLI + LSP for all platforms
+  # ═══════════════════════════════════════════════════════════
+  build-cli:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            artifact: unilang-cli-macos-x86_64
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            artifact: unilang-cli-macos-arm64
+          - os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: unilang-cli-linux-x86_64
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            artifact: unilang-cli-windows-x86_64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build CLI and LSP
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Package (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p dist/${{ matrix.artifact }}/bin
+          cp target/${{ matrix.target }}/release/unilang-cli dist/${{ matrix.artifact }}/bin/unilang
+          cp target/${{ matrix.target }}/release/unilang-lsp dist/${{ matrix.artifact }}/bin/unilang-lsp
+          cp README.md LICENSE dist/${{ matrix.artifact }}/
+          cd dist && tar -czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          mkdir -p dist/${{ matrix.artifact }}/bin
+          cp target/${{ matrix.target }}/release/unilang-cli.exe dist/${{ matrix.artifact }}/bin/unilang.exe
+          cp target/${{ matrix.target }}/release/unilang-lsp.exe dist/${{ matrix.artifact }}/bin/unilang-lsp.exe
+          cp README.md LICENSE dist/${{ matrix.artifact }}/
+          cd dist && Compress-Archive -Path ${{ matrix.artifact }} -DestinationPath ${{ matrix.artifact }}.zip
+        shell: pwsh
+
+      - name: Create macOS DMG
+        if: matrix.target == 'aarch64-apple-darwin'
+        run: |
+          hdiutil create -volname "UniLang" -srcfolder dist/${{ matrix.artifact }} \
+            -ov -format UDZO dist/${{ matrix.artifact }}.dmg
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: dist/${{ matrix.artifact }}.*
+
+  # ═══════════════════════════════════════════════════════════
+  # Build VS Code Extension (.vsix)
+  # ═══════════════════════════════════════════════════════════
+  build-vscode:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Build VSIX
+        run: |
+          cd tools/vscode-extension
+          npm install
+          npx @vscode/vsce package --out ../../dist/unilang-vscode.vsix
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unilang-vscode
+          path: dist/unilang-vscode.vsix
+
+  # ═══════════════════════════════════════════════════════════
+  # Build JetBrains Plugin (.zip)
+  # ═══════════════════════════════════════════════════════════
+  build-jetbrains:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Gradle
+        uses: gradle/actions/setup-gradle@v3
+
+      - name: Build Plugin
+        run: |
+          cd tools/jetbrains-plugin
+          gradle buildPlugin
+
+      - name: Copy artifact
+        run: |
+          mkdir -p dist
+          cp tools/jetbrains-plugin/build/distributions/*.zip dist/unilang-jetbrains.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: unilang-jetbrains
+          path: dist/unilang-jetbrains.zip
+
+  # ═══════════════════════════════════════════════════════════
+  # Build UniLang IDE (Electron — all platforms)
+  # ═══════════════════════════════════════════════════════════
+  build-ide:
+    strategy:
+      matrix:
+        include:
+          - os: macos-latest
+            script: build:mac
+            artifact: unilang-ide-macos
+            pattern: 'dist/*.dmg'
+          - os: windows-latest
+            script: build:win
+            artifact: unilang-ide-windows
+            pattern: 'dist/*.exe'
+          - os: ubuntu-latest
+            script: build:linux
+            artifact: unilang-ide-linux
+            pattern: 'dist/*.AppImage'
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: cd tools/unilang-ide && npm install
+
+      - name: Build IDE
+        run: cd tools/unilang-ide && npm run ${{ matrix.script }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: tools/unilang-ide/${{ matrix.pattern }}
+
+  # ═══════════════════════════════════════════════════════════
+  # Create GitHub Release with all artifacts
+  # ═══════════════════════════════════════════════════════════
+  release:
+    needs: [build-cli, build-vscode, build-jetbrains, build-ide]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: List artifacts
+        run: find release-artifacts -type f | sort
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name || format('v{0}', github.event.inputs.version) }}
+          name: UniLang ${{ github.ref_name || github.event.inputs.version }}
+          draft: false
+          prerelease: true
+          body: |
+            ## UniLang ${{ github.ref_name || github.event.inputs.version }}
+
+            ### Downloads
+
+            #### UniLang CLI (Compiler + Language Server)
+            | Platform | Download |
+            |----------|----------|
+            | macOS (Apple Silicon) | `unilang-cli-macos-arm64.tar.gz` / `.dmg` |
+            | macOS (Intel) | `unilang-cli-macos-x86_64.tar.gz` |
+            | Linux (x86_64) | `unilang-cli-linux-x86_64.tar.gz` |
+            | Windows (x86_64) | `unilang-cli-windows-x86_64.zip` |
+
+            #### IDE Plugins
+            | IDE | Download | Install |
+            |-----|----------|---------|
+            | VS Code / Cursor | `unilang-vscode.vsix` | `code --install-extension unilang-vscode.vsix` |
+            | IntelliJ / PyCharm | `unilang-jetbrains.zip` | Settings → Plugins → ⚙ → Install from Disk |
+            | Eclipse | Coming soon | Drop JAR into `dropins/` folder |
+
+            #### UniLang IDE (Standalone)
+            | Platform | Download |
+            |----------|----------|
+            | macOS | `.dmg` installer |
+            | Windows | `.exe` installer |
+            | Linux | `.AppImage` (portable) |
+
+            ### What's Included
+            - `unilang` — Compiler CLI for `.uniL` files
+            - `unilang-lsp` — Language Server Protocol server (enables real-time error highlighting in any IDE)
+            - VS Code extension with syntax highlighting, snippets, and error diagnostics
+            - JetBrains plugin for IntelliJ IDEA and PyCharm
+            - Standalone IDE with editor, file tree, and terminal
+
+          files: |
+            release-artifacts/**/*
