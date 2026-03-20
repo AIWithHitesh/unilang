@@ -1,0 +1,12 @@
+[package]
+name = "unilang-stdlib"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Standard library of built-in functions for the UniLang runtime"
+
+[dependencies]
+unilang-common = { path = "../unilang-common" }
+unilang-runtime = { path = "../unilang-runtime" }
+unilang-codegen = { path = "../unilang-codegen" }

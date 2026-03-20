@@ -1,0 +1,15 @@
+[package]
+name = "unilang-runtime"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Stack-based bytecode interpreter for the UniLang compiler"
+
+[dependencies]
+unilang-common = { path = "../unilang-common" }
+unilang-codegen = { path = "../unilang-codegen" }
+
+[dev-dependencies]
+unilang-lexer = { path = "../unilang-lexer" }
+unilang-parser = { path = "../unilang-parser" }

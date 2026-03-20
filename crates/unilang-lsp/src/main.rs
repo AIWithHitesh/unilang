@@ -19,7 +19,7 @@ async fn main() {
     let stdin = tokio::io::stdin();
     let stdout = tokio::io::stdout();
 
-    let (service, socket) = LspService::build(|client| Backend::new(client)).finish();
+    let (service, socket) = LspService::build(Backend::new).finish();
 
     eprintln!("UniLang LSP server starting...");
 

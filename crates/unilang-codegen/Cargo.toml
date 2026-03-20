@@ -1,0 +1,12 @@
+[package]
+name = "unilang-codegen"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Bytecode code generator for the UniLang compiler"
+
+[dependencies]
+unilang-common = { path = "../unilang-common" }
+unilang-parser = { path = "../unilang-parser" }
+unilang-semantic = { path = "../unilang-semantic" }

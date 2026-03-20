@@ -49,20 +49,19 @@ UniLang source files use the `.uniL` extension.
 
 ## Project Status
 
-UniLang is in **active development**. Current progress:
+UniLang is in **active development** with a working compiler pipeline:
 
 - [x] Language specification
 - [x] Lexer (hand-written, full Python+Java token support)
-- [x] AST definitions
-- [x] CLI toolchain (`unilang lex`, `unilang parse`)
+- [x] Parser (Pratt expression parser + recursive descent statements)
+- [x] Semantic analyzer (gradual type system, scope resolution, name binding)
+- [x] Code generation (stack-based bytecode with 40+ opcodes)
+- [x] Runtime VM (stack-based interpreter with call frames)
+- [x] Standard library (35+ built-in functions: math, collections, strings, I/O)
+- [x] CLI toolchain (`unilang run`, `unilang check`, `unilang compile`, `unilang lex`)
 - [x] Language Server Protocol (LSP) server
 - [x] IDE support (VS Code, JetBrains, Eclipse, standalone IDE)
 - [x] ML framework (custom Tensor, autograd, layers, optimizers)
-- [ ] Parser implementation
-- [ ] Semantic analyzer
-- [ ] Code generation (JVM bytecode + CPython interop)
-- [ ] Runtime with dual-VM bridge
-- [ ] Standard library
 
 ## UniLang ML Framework
 

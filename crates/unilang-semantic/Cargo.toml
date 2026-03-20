@@ -1,0 +1,11 @@
+[package]
+name = "unilang-semantic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Semantic analysis for the UniLang compiler"
+
+[dependencies]
+unilang-common = { path = "../unilang-common" }
+unilang-parser = { path = "../unilang-parser" }

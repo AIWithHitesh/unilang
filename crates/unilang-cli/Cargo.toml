@@ -14,4 +14,8 @@ path = "src/main.rs"
 unilang-common = { path = "../unilang-common" }
 unilang-lexer = { path = "../unilang-lexer" }
 unilang-parser = { path = "../unilang-parser" }
+unilang-semantic = { path = "../unilang-semantic" }
+unilang-codegen = { path = "../unilang-codegen" }
+unilang-runtime = { path = "../unilang-runtime" }
+unilang-stdlib = { path = "../unilang-stdlib" }
 clap.workspace = true

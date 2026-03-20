@@ -7,9 +7,7 @@
 //! LSP-compatible diagnostics. Also performs basic structural checks
 //! such as unmatched brackets, braces, and parentheses.
 
-use tower_lsp::lsp_types::{
-    Diagnostic, DiagnosticSeverity, NumberOrString, Position, Range,
-};
+use tower_lsp::lsp_types::{Diagnostic, DiagnosticSeverity, NumberOrString, Position, Range};
 use unilang_common::error::Severity;
 use unilang_common::span::SourceId;
 use unilang_lexer::token::TokenKind;
@@ -41,7 +39,10 @@ pub fn generate_diagnostics(source: &str) -> Vec<Diagnostic> {
         diagnostics.push(Diagnostic {
             range,
             severity: Some(severity),
-            code: diag.code.as_ref().map(|c| NumberOrString::String(c.clone())),
+            code: diag
+                .code
+                .as_ref()
+                .map(|c| NumberOrString::String(c.clone())),
             code_description: None,
             source: Some("unilang".to_string()),
             message: diag.message.clone(),
@@ -98,8 +99,7 @@ fn check_balanced_delimiters(
                     if *open == TokenKind::LParen {
                         stack.pop();
                     } else {
-                        let range =
-                            byte_span_to_range(source, token.span.start, token.span.end);
+                        let range = byte_span_to_range(source, token.span.start, token.span.end);
                         diagnostics.push(Diagnostic {
                             range,
                             severity: Some(DiagnosticSeverity::ERROR),
@@ -113,8 +113,7 @@ fn check_balanced_delimiters(
                         });
                     }
                 } else {
-                    let range =
-                        byte_span_to_range(source, token.span.start, token.span.end);
+                    let range = byte_span_to_range(source, token.span.start, token.span.end);
                     diagnostics.push(Diagnostic {
                         range,
                         severity: Some(DiagnosticSeverity::ERROR),
@@ -133,8 +132,7 @@ fn check_balanced_delimiters(
                     if *open == TokenKind::LBracket {
                         stack.pop();
                     } else {
-                        let range =
-                            byte_span_to_range(source, token.span.start, token.span.end);
+                        let range = byte_span_to_range(source, token.span.start, token.span.end);
                         diagnostics.push(Diagnostic {
                             range,
                             severity: Some(DiagnosticSeverity::ERROR),
@@ -148,8 +146,7 @@ fn check_balanced_delimiters(
                         });
                     }
                 } else {
-                    let range =
-                        byte_span_to_range(source, token.span.start, token.span.end);
+                    let range = byte_span_to_range(source, token.span.start, token.span.end);
                     diagnostics.push(Diagnostic {
                         range,
                         severity: Some(DiagnosticSeverity::ERROR),
@@ -168,8 +165,7 @@ fn check_balanced_delimiters(
                     if *open == TokenKind::LBrace {
                         stack.pop();
                     } else {
-                        let range =
-                            byte_span_to_range(source, token.span.start, token.span.end);
+                        let range = byte_span_to_range(source, token.span.start, token.span.end);
                         diagnostics.push(Diagnostic {
                             range,
                             severity: Some(DiagnosticSeverity::ERROR),
@@ -183,8 +179,7 @@ fn check_balanced_delimiters(
                         });
                     }
                 } else {
-                    let range =
-                        byte_span_to_range(source, token.span.start, token.span.end);
+                    let range = byte_span_to_range(source, token.span.start, token.span.end);
                     diagnostics.push(Diagnostic {
                         range,
                         severity: Some(DiagnosticSeverity::ERROR),
@@ -249,7 +244,11 @@ mod tests {
     #[test]
     fn test_no_diagnostics_on_valid_code() {
         let diags = generate_diagnostics("x = 42");
-        assert!(diags.is_empty(), "Expected no diagnostics, got: {:?}", diags);
+        assert!(
+            diags.is_empty(),
+            "Expected no diagnostics, got: {:?}",
+            diags
+        );
     }
 
     #[test]

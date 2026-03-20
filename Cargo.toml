@@ -11,6 +11,10 @@ members = [
     "crates/unilang-parser",
     "crates/unilang-cli",
     "crates/unilang-lsp",
+    "crates/unilang-semantic",
+    "crates/unilang-codegen",
+    "crates/unilang-runtime",
+    "crates/unilang-stdlib",
 ]
 
 [workspace.package]

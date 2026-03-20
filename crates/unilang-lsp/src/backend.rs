@@ -156,9 +156,7 @@ impl LanguageServer for Backend {
         let uri = params.text_document.uri;
         self.documents.write().await.remove(&uri);
         // Clear diagnostics for closed files.
-        self.client
-            .publish_diagnostics(uri, Vec::new(), None)
-            .await;
+        self.client.publish_diagnostics(uri, Vec::new(), None).await;
     }
 
     async fn hover(&self, params: HoverParams) -> Result<Option<Hover>> {
@@ -175,10 +173,7 @@ impl LanguageServer for Backend {
         Ok(hover::get_hover_info(&text, position))
     }
 
-    async fn completion(
-        &self,
-        params: CompletionParams,
-    ) -> Result<Option<CompletionResponse>> {
+    async fn completion(&self, params: CompletionParams) -> Result<Option<CompletionResponse>> {
         let uri = params.text_document_position.text_document.uri;
         let position = params.text_document_position.position;
 
