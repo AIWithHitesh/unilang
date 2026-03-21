@@ -90,11 +90,13 @@ jobs:
       - name: Build VSIX
         run: |
           cd tools/vscode-extension
+          cp ../../LICENSE LICENSE
           npm install
           npx @vscode/vsce package \
             --baseContentUrl https://github.com/hiteshkumar2187/unilang/blob/main/tools/vscode-extension/ \
-            --baseImagesUrl https://github.com/hiteshkumar2187/unilang/raw/main/tools/vscode-extension/ \
-            --out ../../dist/unilang-vscode.vsix
+            --baseImagesUrl https://github.com/hiteshkumar2187/unilang/raw/main/tools/vscode-extension/
+          mkdir -p ../../dist
+          cp *.vsix ../../dist/unilang-vscode.vsix
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
