@@ -1,6 +1,6 @@
 # UniLang for Visual Studio Code
 
-> Part of the [UniLang](../../README.md) project — a unified programming language combining Python and Java syntax.
+> Part of the [UniLang](https://github.com/hiteshkumar2187/unilang) project — a unified programming language combining Python and Java syntax.
 
 Language support for **UniLang**, a hybrid programming language that combines Python and Java syntax in `.uniL` files.
 

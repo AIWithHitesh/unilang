@@ -13,46 +13,30 @@ files:
 mac:
   category: public.app-category.developer-tools
   target:
-    - dmg
-    - zip
-  icon: build/icon.icns
+    - target: dmg
+      arch:
+        - arm64
+    - target: zip
+      arch:
+        - arm64
 
 dmg:
-  contents:
-    - x: 130
-      y: 220
-    - x: 410
-      y: 220
-      type: link
-      path: /Applications
+  writeUpdateInfo: false
 
 win:
   target:
     - target: nsis
       arch:
         - x64
-        - ia32
-  icon: build/icon.ico
 
 nsis:
-  oneClick: false
-  allowToChangeInstallationDirectory: true
-  installerIcon: build/icon.ico
-  uninstallerIcon: build/icon.ico
+  oneClick: true
+  perMachine: false
 
 linux:
   target:
     - AppImage
-    - deb
   category: Development
-  icon: build/icons
   maintainer: UniLang Contributors
 
-deb:
-  depends:
-    - gconf2
-    - gconf-service
-    - libnotify4
-    - libappindicator1
-    - libxtst6
-    - libnss3
+publish: null

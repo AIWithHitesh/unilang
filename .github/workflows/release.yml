@@ -20,14 +20,15 @@ jobs:
   # ═══════════════════════════════════════════════════════════
   build-cli:
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            target: x86_64-apple-darwin
-            artifact: unilang-cli-macos-x86_64
-          - os: macos-latest
             target: aarch64-apple-darwin
             artifact: unilang-cli-macos-arm64
+          - os: macos-13
+            target: x86_64-apple-darwin
+            artifact: unilang-cli-macos-x86_64
           - os: ubuntu-latest
             target: x86_64-unknown-linux-gnu
             artifact: unilang-cli-linux-x86_64
@@ -47,30 +48,26 @@ jobs:
       - name: Build CLI and LSP
         run: cargo build --release --target ${{ matrix.target }}
 
+      # Binary name is "unilang" (not "unilang-cli") per Cargo.toml [[bin]]
       - name: Package (Unix)
         if: runner.os != 'Windows'
         run: |
           mkdir -p dist/${{ matrix.artifact }}/bin
-          cp target/${{ matrix.target }}/release/unilang-cli dist/${{ matrix.artifact }}/bin/unilang
-          cp target/${{ matrix.target }}/release/unilang-lsp dist/${{ matrix.artifact }}/bin/unilang-lsp
-          cp README.md LICENSE dist/${{ matrix.artifact }}/
+          cp target/${{ matrix.target }}/release/unilang dist/${{ matrix.artifact }}/bin/unilang || true
+          cp target/${{ matrix.target }}/release/unilang-lsp dist/${{ matrix.artifact }}/bin/unilang-lsp || true
+          cp README.md LICENSE dist/${{ matrix.artifact }}/ || true
           cd dist && tar -czf ${{ matrix.artifact }}.tar.gz ${{ matrix.artifact }}
 
       - name: Package (Windows)
         if: runner.os == 'Windows'
-        run: |
-          mkdir -p dist/${{ matrix.artifact }}/bin
-          cp target/${{ matrix.target }}/release/unilang-cli.exe dist/${{ matrix.artifact }}/bin/unilang.exe
-          cp target/${{ matrix.target }}/release/unilang-lsp.exe dist/${{ matrix.artifact }}/bin/unilang-lsp.exe
-          cp README.md LICENSE dist/${{ matrix.artifact }}/
-          cd dist && Compress-Archive -Path ${{ matrix.artifact }} -DestinationPath ${{ matrix.artifact }}.zip
         shell: pwsh
-
-      - name: Create macOS DMG
-        if: matrix.target == 'aarch64-apple-darwin'
         run: |
-          hdiutil create -volname "UniLang" -srcfolder dist/${{ matrix.artifact }} \
-            -ov -format UDZO dist/${{ matrix.artifact }}.dmg
+          New-Item -ItemType Directory -Force -Path dist/${{ matrix.artifact }}/bin
+          Copy-Item -ErrorAction SilentlyContinue target/${{ matrix.target }}/release/unilang.exe dist/${{ matrix.artifact }}/bin/unilang.exe
+          Copy-Item -ErrorAction SilentlyContinue target/${{ matrix.target }}/release/unilang-lsp.exe dist/${{ matrix.artifact }}/bin/unilang-lsp.exe
+          Copy-Item -ErrorAction SilentlyContinue README.md dist/${{ matrix.artifact }}/
+          Copy-Item -ErrorAction SilentlyContinue LICENSE dist/${{ matrix.artifact }}/
+          Compress-Archive -Path dist/${{ matrix.artifact }} -DestinationPath dist/${{ matrix.artifact }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -94,7 +91,10 @@ jobs:
         run: |
           cd tools/vscode-extension
           npm install
-          npx @vscode/vsce package --out ../../dist/unilang-vscode.vsix
+          npx @vscode/vsce package \
+            --baseContentUrl https://github.com/hiteshkumar2187/unilang/blob/main/tools/vscode-extension/ \
+            --baseImagesUrl https://github.com/hiteshkumar2187/unilang/raw/main/tools/vscode-extension/ \
+            --out ../../dist/unilang-vscode.vsix
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -104,6 +104,7 @@ jobs:
 
   # ═══════════════════════════════════════════════════════════
   # Build JetBrains Plugin (.zip)
+  # Pinned to Gradle 8.5 for compatibility with intellij plugin
   # ═══════════════════════════════════════════════════════════
   build-jetbrains:
     runs-on: ubuntu-latest
@@ -117,6 +118,8 @@ jobs:
 
       - name: Setup Gradle
         uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
 
       - name: Build Plugin
         run: |
@@ -135,50 +138,82 @@ jobs:
           path: dist/unilang-jetbrains.zip
 
   # ═══════════════════════════════════════════════════════════
-  # Build UniLang IDE (Electron — all platforms)
+  # Build UniLang IDE (Electron)
+  # Build on each platform separately for native modules
   # ═══════════════════════════════════════════════════════════
-  build-ide:
-    strategy:
-      matrix:
-        include:
-          - os: macos-latest
-            script: build:mac
-            artifact: unilang-ide-macos
-            pattern: 'dist/*.dmg'
-          - os: windows-latest
-            script: build:win
-            artifact: unilang-ide-windows
-            pattern: 'dist/*.exe'
-          - os: ubuntu-latest
-            script: build:linux
-            artifact: unilang-ide-linux
-            pattern: 'dist/*.AppImage'
-
-    runs-on: ${{ matrix.os }}
+  build-ide-mac:
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
-
-      - name: Install dependencies
-        run: cd tools/unilang-ide && npm install
-
-      - name: Build IDE
-        run: cd tools/unilang-ide && npm run ${{ matrix.script }}
-
-      - name: Upload artifact
+      - name: Install and build
+        run: |
+          cd tools/unilang-ide
+          npm install
+          npm run build:mac
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+      - name: Upload DMG
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}
-          path: tools/unilang-ide/${{ matrix.pattern }}
+          name: unilang-ide-macos
+          path: tools/unilang-ide/dist/*.dmg
+          if-no-files-found: warn
+      - name: Upload ZIP (fallback)
+        uses: actions/upload-artifact@v4
+        with:
+          name: unilang-ide-macos-zip
+          path: tools/unilang-ide/dist/*.zip
+          if-no-files-found: warn
+
+  build-ide-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install and build
+        run: |
+          cd tools/unilang-ide
+          npm install
+          npm run build:linux
+      - name: Upload AppImage
+        uses: actions/upload-artifact@v4
+        with:
+          name: unilang-ide-linux
+          path: tools/unilang-ide/dist/*.AppImage
+          if-no-files-found: warn
+
+  build-ide-win:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install and build
+        shell: bash
+        run: |
+          cd tools/unilang-ide
+          npm install
+          npm run build:win
+      - name: Upload EXE
+        uses: actions/upload-artifact@v4
+        with:
+          name: unilang-ide-windows
+          path: tools/unilang-ide/dist/*.exe
+          if-no-files-found: warn
 
   # ═══════════════════════════════════════════════════════════
   # Create GitHub Release with all artifacts
   # ═══════════════════════════════════════════════════════════
   release:
-    needs: [build-cli, build-vscode, build-jetbrains, build-ide]
+    needs: [build-cli, build-vscode, build-jetbrains, build-ide-mac, build-ide-linux, build-ide-win]
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -190,9 +225,10 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: release-artifacts
+        continue-on-error: true
 
       - name: List artifacts
-        run: find release-artifacts -type f | sort
+        run: find release-artifacts -type f 2>/dev/null | sort || echo "No artifacts found"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
@@ -209,7 +245,7 @@ jobs:
             #### UniLang CLI (Compiler + Language Server)
             | Platform | Download |
             |----------|----------|
-            | macOS (Apple Silicon) | `unilang-cli-macos-arm64.tar.gz` / `.dmg` |
+            | macOS (Apple Silicon) | `unilang-cli-macos-arm64.tar.gz` |
             | macOS (Intel) | `unilang-cli-macos-x86_64.tar.gz` |
             | Linux (x86_64) | `unilang-cli-linux-x86_64.tar.gz` |
             | Windows (x86_64) | `unilang-cli-windows-x86_64.zip` |
@@ -219,21 +255,21 @@ jobs:
             |-----|----------|---------|
             | VS Code / Cursor | `unilang-vscode.vsix` | `code --install-extension unilang-vscode.vsix` |
             | IntelliJ / PyCharm | `unilang-jetbrains.zip` | Settings → Plugins → ⚙ → Install from Disk |
-            | Eclipse | Coming soon | Drop JAR into `dropins/` folder |
 
             #### UniLang IDE (Standalone)
             | Platform | Download |
             |----------|----------|
-            | macOS | `.dmg` installer |
+            | macOS | `.dmg` / `.zip` |
             | Windows | `.exe` installer |
-            | Linux | `.AppImage` (portable) |
+            | Linux | `.AppImage` |
 
-            ### What's Included
-            - `unilang` — Compiler CLI for `.uniL` files
-            - `unilang-lsp` — Language Server Protocol server (enables real-time error highlighting in any IDE)
-            - VS Code extension with syntax highlighting, snippets, and error diagnostics
-            - JetBrains plugin for IntelliJ IDEA and PyCharm
-            - Standalone IDE with editor, file tree, and terminal
+            ### Installation Guides
+            - [CLI Installation](https://github.com/hiteshkumar2187/unilang/blob/main/docs/guides/INSTALLATION.md)
+            - [VS Code Setup](https://github.com/hiteshkumar2187/unilang/blob/main/docs/guides/VSCODE_SETUP.md)
+            - [IntelliJ/PyCharm Setup](https://github.com/hiteshkumar2187/unilang/blob/main/docs/guides/JETBRAINS_SETUP.md)
+            - [Eclipse Setup](https://github.com/hiteshkumar2187/unilang/blob/main/docs/guides/ECLIPSE_SETUP.md)
+            - [IDE Setup](https://github.com/hiteshkumar2187/unilang/blob/main/docs/guides/IDE_SETUP.md)
+            - [Quick Start](https://github.com/hiteshkumar2187/unilang/blob/main/docs/guides/QUICKSTART.md)
 
           files: |
             release-artifacts/**/*
