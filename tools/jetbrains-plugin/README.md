@@ -1,5 +1,7 @@
 # UniLang JetBrains Plugin
 
+> Part of the [UniLang](../../README.md) project — a unified programming language combining Python and Java syntax.
+
 Language support for UniLang (`.uniL` files) in JetBrains IDEs including IntelliJ IDEA, PyCharm, WebStorm, and others.
 
 UniLang combines Python and Java syntax into a single language.
@@ -34,3 +36,8 @@ Run the plugin in a sandboxed IDE instance:
 ```bash
 ./gradlew runIde
 ```
+
+## Related Documentation
+
+- [JetBrains Setup Guide](../../docs/guides/JETBRAINS_SETUP.md) — Detailed installation and configuration instructions
+- [Language Specification](../../docs/specifications/LANGUAGE_SPEC.md) — Formal grammar and semantics

@@ -1,5 +1,7 @@
 # UniLang ML Framework
 
+> Part of the [UniLang](../../README.md) project — a unified programming language combining Python and Java syntax.
+
 A neural network framework built **entirely from scratch** in UniLang — no PyTorch, no TensorFlow, no external ML libraries.
 
 ## Architecture
@@ -168,6 +170,26 @@ model.add(Sigmoid())
 - `RMSProp` — Adaptive learning rate
 - `StepLRScheduler` — Step decay
 - `CosineAnnealingScheduler` — Cosine annealing
+
+## Documentation
+
+| Document | Description |
+|----------|-------------|
+| [ML Framework Overview](docs/README.md) | Documentation index and getting started |
+| [Core Concepts](docs/01_CORE_CONCEPTS.md) | Tensors, neurons, networks |
+| [Training Guide](docs/02_TRAINING_GUIDE.md) | Loss functions, optimizers, training loops |
+| [UniNN Model](docs/03_UNINN_MODEL.md) | Gated residual blocks, multi-scale mixer |
+| [Advanced Layers](docs/04_ADVANCED_LAYERS.md) | LSTM, Conv1D, Embedding, BatchNorm |
+| [Parallel Inference](docs/05_PARALLEL_INFERENCE.md) | Java thread pool ensemble |
+| [Time Series](docs/06_TIME_SERIES.md) | LSTM and Conv1D for sequential data |
+| [API Reference](docs/07_API_REFERENCE.md) | Complete API reference |
+| [Examples](docs/08_EXAMPLES.md) | End-to-end examples |
+
+### Related UniLang Documentation
+
+- [Interop Guide](../../docs/design/INTEROP_GUIDE.md) — How Python + Java code work together in UniLang
+- [Compiler Pipeline](../../docs/architecture/COMPILER_PIPELINE.md) — 6-stage compilation from source to execution
+- [Language Specification](../../docs/specifications/LANGUAGE_SPEC.md) — Formal grammar and semantics
 
 ## License
 

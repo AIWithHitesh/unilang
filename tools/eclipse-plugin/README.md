@@ -1,5 +1,7 @@
 # UniLang Eclipse Plugin
 
+> Part of the [UniLang](../../README.md) project — a unified programming language combining Python and Java syntax.
+
 An Eclipse IDE plugin providing editor support for the UniLang programming language (`.uniL` files). UniLang combines Python and Java syntax into a single unified language.
 
 ## Features
@@ -92,3 +94,8 @@ eclipse-plugin/
   build.properties           -- PDE build configuration
   icons/                     -- Editor icons
 ```
+
+## Related Documentation
+
+- [Eclipse Setup Guide](../../docs/guides/ECLIPSE_SETUP.md) — Detailed installation and configuration instructions
+- [Main Project README](../../README.md) — UniLang overview, downloads, and full documentation index

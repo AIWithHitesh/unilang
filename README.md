@@ -63,6 +63,26 @@ UniLang is in **active development** with a working compiler pipeline:
 - [x] IDE support (VS Code, JetBrains, Eclipse, standalone IDE)
 - [x] ML framework (custom Tensor, autograd, layers, optimizers)
 
+## Downloads & Installation
+
+### UniLang CLI (Compiler + Language Server)
+Download from [GitHub Releases](https://github.com/hiteshkumar2187/unilang/releases):
+
+| Platform | Download | Install |
+|----------|----------|---------|
+| macOS (Apple Silicon) | `unilang-cli-macos-arm64.dmg` | Open DMG, drag to `/usr/local/bin/` |
+| macOS (Intel) | `unilang-cli-macos-x86_64.tar.gz` | `tar xzf *.tar.gz && sudo cp bin/unilang /usr/local/bin/` |
+| Windows | `unilang-cli-windows-x86_64.zip` | Extract, add `bin/` to PATH |
+| Linux | `unilang-cli-linux-x86_64.tar.gz` | `tar xzf *.tar.gz && sudo cp bin/unilang /usr/local/bin/` |
+
+### IDE Plugins
+| IDE | Download | Installation Guide |
+|-----|----------|--------------------|
+| VS Code / Cursor | `unilang-vscode.vsix` | [VS Code Plugin Guide](docs/guides/VSCODE_SETUP.md) |
+| IntelliJ / PyCharm | `unilang-jetbrains.zip` | [JetBrains Plugin Guide](docs/guides/JETBRAINS_SETUP.md) |
+| Eclipse | `unilang-eclipse.jar` | [Eclipse Plugin Guide](docs/guides/ECLIPSE_SETUP.md) |
+| UniLang IDE (Standalone) | `.dmg` / `.exe` / `.AppImage` | [IDE Setup Guide](docs/guides/IDE_SETUP.md) |
+
 ## UniLang ML Framework
 
 Build neural networks **from scratch** in UniLang — no PyTorch, no TensorFlow.
@@ -118,15 +138,43 @@ for epoch in range(100):
 
 ## Documentation
 
+### Getting Started
 | Document | Description |
 |----------|-------------|
-| [ML Framework Docs](examples/ml-framework/docs/README.md) | Learn to build neural networks from scratch |
-| [Product Requirements (PRD)](docs/planning/PRD.md) | Product vision, goals, and requirements |
-| [Architecture](docs/architecture/ARCHITECTURE.md) | System architecture and component design |
-| [Language Specification](docs/specifications/LANGUAGE_SPEC.md) | Formal language grammar and semantics |
+| [Installation Guide](docs/guides/INSTALLATION.md) | How to install UniLang on any platform |
+| [Quick Start Tutorial](docs/guides/QUICKSTART.md) | Write your first UniLang program in 5 minutes |
+| [IDE Setup Guides](docs/guides/) | Step-by-step plugin installation for all IDEs |
+
+### Language Reference
+| Document | Description |
+|----------|-------------|
+| [Language Specification](docs/specifications/LANGUAGE_SPEC.md) | Formal grammar and semantics |
+| [Interop Guide](docs/design/INTEROP_GUIDE.md) | How Python + Java code work together |
+| [Type System](docs/design/TYPE_SYSTEM.md) | Gradual typing, implicit casting rules |
+
+### Architecture
+| Document | Description |
+|----------|-------------|
+| [Compiler Pipeline](docs/architecture/COMPILER_PIPELINE.md) | 6-stage compilation from source to execution |
+| [System Architecture](docs/architecture/ARCHITECTURE.md) | Overall system design |
 | [Design Decisions](docs/design/DESIGN_DECISIONS.md) | Key design choices and trade-offs |
-| [Roadmap](docs/planning/ROADMAP.md) | Development phases and milestones |
-| [Contributing](CONTRIBUTING.md) | How to contribute to UniLang |
+| [Threading Model](docs/design/THREADING_MODEL.md) | Multi-threading strategy |
+
+### ML Framework
+| Document | Description |
+|----------|-------------|
+| [ML Framework Docs](examples/ml-framework/docs/README.md) | Build neural networks from scratch |
+| [Core Concepts](examples/ml-framework/docs/01_CORE_CONCEPTS.md) | Tensors, neurons, networks |
+| [UniNN Architecture](examples/ml-framework/docs/03_UNINN_MODEL.md) | Our custom model architecture |
+| [API Reference](examples/ml-framework/docs/07_API_REFERENCE.md) | Complete API reference |
+
+### Project
+| Document | Description |
+|----------|-------------|
+| [PRD](docs/planning/PRD.md) | Product requirements |
+| [Roadmap](docs/planning/ROADMAP.md) | Development phases |
+| [Contributing](CONTRIBUTING.md) | How to contribute |
+| [Governance](docs/planning/GOVERNANCE.md) | Apache-style governance |
 
 ## Getting Started
 

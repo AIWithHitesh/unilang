@@ -1,5 +1,7 @@
 # UniLang IDE
 
+> Part of the [UniLang](../../README.md) project — a unified programming language combining Python and Java syntax.
+
 A lightweight, standalone Electron-based IDE for the UniLang programming language. UniLang combines Python and Java syntax in `.uniL` files.
 
 ## Features
@@ -96,6 +98,12 @@ The IDE uses Electron's main/renderer process model with `contextIsolation` enab
 - **Menu Events**: menu actions are forwarded from main to renderer via IPC
 
 The code editor uses a textarea overlaid with a syntax-highlighted `<div>` -- no external editor library required.
+
+## Related Documentation
+
+- [IDE Setup Guide](../../docs/guides/IDE_SETUP.md) — Detailed installation and configuration instructions
+- [Compiler Pipeline](../../docs/architecture/COMPILER_PIPELINE.md) — 6-stage compilation from source to execution
+- [Main Project README](../../README.md) — UniLang overview, downloads, and full documentation index
 
 ## License
 

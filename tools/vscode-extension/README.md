@@ -1,5 +1,7 @@
 # UniLang for Visual Studio Code
 
+> Part of the [UniLang](../../README.md) project — a unified programming language combining Python and Java syntax.
+
 Language support for **UniLang**, a hybrid programming language that combines Python and Java syntax in `.uniL` files.
 
 ## Features
@@ -39,6 +41,21 @@ UniLang supports a unified syntax that includes:
 | `thread`     | Thread pool executor pattern         |
 | `mlmodel`    | ML model class skeleton              |
 
+## LSP Capabilities
+
+When paired with the [UniLang Language Server](../../crates/unilang-lsp/), the extension provides:
+
+- Real-time diagnostics and error reporting
+- Go-to-definition and find references
+- Hover documentation
+- Code actions and quick fixes
+
 ## Requirements
 
 VS Code 1.75.0 or later.
+
+## Related Documentation
+
+- [VS Code Setup Guide](../../docs/guides/VSCODE_SETUP.md) — Detailed installation and configuration instructions
+- [Language Specification](../../docs/specifications/LANGUAGE_SPEC.md) — Formal grammar and semantics
+- [Interop Guide](../../docs/design/INTEROP_GUIDE.md) — How Python + Java code work together in UniLang
