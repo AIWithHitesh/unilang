@@ -32,10 +32,11 @@ pub fn check_binary_op(
     match op {
         // Arithmetic operators
         BinOp::Add => {
-            if left.is_numeric() && right.is_numeric() {
-                Type::common_type(left, right)
-            } else if matches!(left, Type::String) || matches!(right, Type::String) {
+            // String concatenation: String + anything → String (auto-convert to string)
+            if matches!(left, Type::String) || matches!(right, Type::String) {
                 Type::String
+            } else if left.is_numeric() && right.is_numeric() {
+                Type::coercion_result(left, right)
             } else {
                 diagnostics.report(
                     Diagnostic::error(format!(
@@ -51,7 +52,7 @@ pub fn check_binary_op(
         }
         BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::FloorDiv | BinOp::Mod | BinOp::Pow => {
             if left.is_numeric() && right.is_numeric() {
-                Type::common_type(left, right)
+                Type::coercion_result(left, right)
             } else {
                 diagnostics.report(
                     Diagnostic::error(format!(
@@ -66,7 +67,7 @@ pub fn check_binary_op(
             }
         }
 
-        // Comparison operators
+        // Comparison operators — allow cross-type numeric comparison
         BinOp::Eq | BinOp::NotEq => Type::Bool,
         BinOp::Lt | BinOp::Gt | BinOp::LtEq | BinOp::GtEq => {
             if (left.is_numeric() && right.is_numeric())

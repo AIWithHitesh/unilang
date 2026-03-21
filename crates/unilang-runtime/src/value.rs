@@ -77,6 +77,50 @@ impl RuntimeValue {
             _ => None,
         }
     }
+
+    /// Coerce this value to an integer, returning a RuntimeError on failure.
+    pub fn coerce_to_int(&self) -> Result<i64, crate::error::RuntimeError> {
+        match self {
+            RuntimeValue::Int(n) => Ok(*n),
+            RuntimeValue::Float(f) => Ok(*f as i64),
+            RuntimeValue::Bool(b) => Ok(if *b { 1 } else { 0 }),
+            RuntimeValue::String(s) => s.parse::<i64>().map_err(|_| {
+                crate::error::RuntimeError::type_error(format!("cannot convert '{}' to int", s))
+            }),
+            RuntimeValue::Null => Ok(0),
+            other => Err(crate::error::RuntimeError::type_error(format!(
+                "cannot convert {} to int",
+                other
+            ))),
+        }
+    }
+
+    /// Coerce this value to a float, returning a RuntimeError on failure.
+    pub fn coerce_to_float(&self) -> Result<f64, crate::error::RuntimeError> {
+        match self {
+            RuntimeValue::Float(f) => Ok(*f),
+            RuntimeValue::Int(n) => Ok(*n as f64),
+            RuntimeValue::Bool(b) => Ok(if *b { 1.0 } else { 0.0 }),
+            RuntimeValue::String(s) => s.parse::<f64>().map_err(|_| {
+                crate::error::RuntimeError::type_error(format!("cannot convert '{}' to float", s))
+            }),
+            RuntimeValue::Null => Ok(0.0),
+            other => Err(crate::error::RuntimeError::type_error(format!(
+                "cannot convert {} to float",
+                other
+            ))),
+        }
+    }
+
+    /// Coerce this value to a string. Always succeeds.
+    pub fn coerce_to_string(&self) -> String {
+        format!("{}", self)
+    }
+
+    /// Coerce this value to a boolean (truthiness). Always succeeds.
+    pub fn coerce_to_bool(&self) -> bool {
+        self.is_truthy()
+    }
 }
 
 impl fmt::Display for RuntimeValue {

@@ -43,6 +43,7 @@ impl Type {
     /// Returns `true` if `self` can accept a value of type `other`.
     ///
     /// Gradual typing: `Dynamic` is assignable to/from anything.
+    /// Supports implicit widening conversions and cross-syntax interop.
     pub fn is_assignable_from(&self, other: &Type) -> bool {
         // Error and Dynamic always pass
         if matches!(self, Type::Error)
@@ -65,14 +66,22 @@ impl Type {
             | (Type::Char, Type::Char)
             | (Type::Void, Type::Void) => true,
 
-            // Null is assignable to Optional and class types
+            // Null is assignable to Optional, class types, and Dynamic
             (Type::Optional(_), Type::Null) => true,
             (Type::Class(_), Type::Null) => true,
 
-            // Numeric widening
+            // Numeric widening: Int → Float → Double
             (Type::Float, Type::Int) | (Type::Double, Type::Int) | (Type::Double, Type::Float) => {
                 true
             }
+
+            // Implicit narrowing with coercion (e.g., int x = 5.0)
+            (Type::Int, Type::Float) | (Type::Int, Type::Double) | (Type::Float, Type::Double) => {
+                true
+            }
+
+            // Implicit toString: String accepts any type
+            (Type::String, _) => true,
 
             // Same class name
             (Type::Class(a), Type::Class(b)) => a == b,
@@ -93,6 +102,89 @@ impl Type {
 
             _ => false,
         }
+    }
+
+    /// Returns `true` if a value of this type can be implicitly coerced to `target`.
+    ///
+    /// This is broader than `is_assignable_from` — it includes:
+    /// - Numeric widening: Int → Float → Double
+    /// - String conversion: any type can be coerced to String (for print/concat)
+    /// - Dynamic compatibility: Dynamic interops with everything
+    pub fn can_coerce_to(&self, target: &Type) -> bool {
+        // Error/Unknown/Dynamic always coerce
+        if matches!(self, Type::Error | Type::Unknown | Type::Dynamic)
+            || matches!(target, Type::Error | Type::Unknown | Type::Dynamic)
+        {
+            return true;
+        }
+
+        // Same type always coerces
+        if self == target {
+            return true;
+        }
+
+        // Any type can coerce to String (implicit toString)
+        if matches!(target, Type::String) {
+            return true;
+        }
+
+        // Numeric widening and narrowing
+        if self.is_numeric() && target.is_numeric() {
+            return true;
+        }
+
+        // Null coerces to Optional
+        if matches!(self, Type::Null) && matches!(target, Type::Optional(_)) {
+            return true;
+        }
+
+        // Null coerces to Dynamic
+        if matches!(self, Type::Null) && matches!(target, Type::Dynamic) {
+            return true;
+        }
+
+        // Delegate to is_assignable_from for the rest
+        target.is_assignable_from(self)
+    }
+
+    /// Returns the common type for binary operations between `a` and `b`.
+    ///
+    /// - Int op Int → Int
+    /// - Int op Float → Float (promote Int)
+    /// - Int op Double → Double
+    /// - Float op Double → Double
+    /// - Dynamic op anything → Dynamic
+    /// - String + anything → String (concat)
+    pub fn coercion_result(a: &Type, b: &Type) -> Type {
+        // Same type → same type
+        if a == b {
+            return a.clone();
+        }
+        // Dynamic interop
+        if matches!(a, Type::Dynamic) || matches!(b, Type::Dynamic) {
+            return Type::Dynamic;
+        }
+        // Error recovery
+        if matches!(a, Type::Error) || matches!(b, Type::Error) {
+            return Type::Error;
+        }
+        // Unknown passes through
+        if matches!(a, Type::Unknown) || matches!(b, Type::Unknown) {
+            return Type::Dynamic;
+        }
+        // Numeric promotion
+        if a.is_numeric() && b.is_numeric() {
+            return match (a, b) {
+                (Type::Double, _) | (_, Type::Double) => Type::Double,
+                (Type::Float, _) | (_, Type::Float) => Type::Float,
+                _ => Type::Int,
+            };
+        }
+        // String concatenation: String + anything → String
+        if matches!(a, Type::String) || matches!(b, Type::String) {
+            return Type::String;
+        }
+        Type::Error
     }
 
     /// Returns `true` if this type is numeric (Int, Float, Double).

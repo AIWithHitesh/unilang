@@ -477,6 +477,120 @@ mod tests {
         assert!(has_error_containing(&diags, "cannot assign"));
     }
 
+    // ── Cross-syntax interop tests ────────────────────────
+
+    #[test]
+    fn test_python_var_plus_java_var() {
+        // c = 20 (Python, Dynamic/Int inferred)
+        // int a = 10 (Java, Int)
+        // d = c + a  — both numeric, should produce no errors
+        let module = make_module(vec![
+            python_var_decl_stmt("c", Some(Expr::IntLit(20))),
+            var_decl_stmt(
+                "a",
+                Some(TypeExpr::Named("int".to_string())),
+                Some(Expr::IntLit(10)),
+                vec![],
+            ),
+            python_var_decl_stmt(
+                "d",
+                Some(Expr::BinaryOp(
+                    Box::new(spanned(Expr::Ident("c".to_string()), 20, 21)),
+                    BinOp::Add,
+                    Box::new(spanned(Expr::Ident("a".to_string()), 24, 25)),
+                )),
+            ),
+        ]);
+        let (_result, diags) = analyze(&module);
+        assert!(has_no_errors(&diags));
+    }
+
+    #[test]
+    fn test_java_generic_python_ops() {
+        // List<String> variable used with Python-style dynamic operations
+        let module = make_module(vec![
+            var_decl_stmt(
+                "items",
+                Some(TypeExpr::Generic(
+                    Box::new(spanned(TypeExpr::Named("List".to_string()), 0, 4)),
+                    vec![spanned(TypeExpr::Named("String".to_string()), 5, 11)],
+                )),
+                None,
+                vec![],
+            ),
+            // Python-style access: x = items  (Dynamic accepts Generic)
+            python_var_decl_stmt("x", Some(Expr::Ident("items".to_string()))),
+        ]);
+        let (_result, diags) = analyze(&module);
+        assert!(has_no_errors(&diags));
+    }
+
+    #[test]
+    fn test_python_func_java_args() {
+        // def foo(x, y): pass  — Python function, params are Dynamic
+        // int a = 5
+        // foo(a, 10)  — should work, Dynamic params accept typed args
+        let module = make_module(vec![
+            func_decl_stmt(
+                "foo",
+                vec![make_param("x", None), make_param("y", None)],
+                None,
+                vec![spanned(Stmt::Pass, 20, 24)],
+            ),
+            var_decl_stmt(
+                "a",
+                Some(TypeExpr::Named("int".to_string())),
+                Some(Expr::IntLit(5)),
+                vec![],
+            ),
+            spanned(
+                Stmt::Expr(Expr::Call(
+                    Box::new(spanned(Expr::Ident("foo".to_string()), 60, 63)),
+                    vec![
+                        Argument {
+                            name: None,
+                            value: spanned(Expr::Ident("a".to_string()), 64, 65),
+                        },
+                        Argument {
+                            name: None,
+                            value: spanned(Expr::IntLit(10), 67, 69),
+                        },
+                    ],
+                )),
+                60,
+                70,
+            ),
+        ]);
+        let (_result, diags) = analyze(&module);
+        assert!(has_no_errors(&diags));
+    }
+
+    #[test]
+    fn test_implicit_int_to_float() {
+        // float x = 10  — implicit widening, no error
+        let module = make_module(vec![var_decl_stmt(
+            "x",
+            Some(TypeExpr::Named("float".to_string())),
+            Some(Expr::IntLit(10)),
+            vec![],
+        )]);
+        let (_result, diags) = analyze(&module);
+        assert!(has_no_errors(&diags));
+    }
+
+    #[test]
+    fn test_implicit_string_coercion() {
+        // String s = 42 — should work with implicit conversion
+        let module = make_module(vec![var_decl_stmt(
+            "s",
+            Some(TypeExpr::Named("String".to_string())),
+            Some(Expr::IntLit(42)),
+            vec![],
+        )]);
+        let (_result, diags) = analyze(&module);
+        assert!(has_no_errors(&diags));
+    }
+
     #[test]
     fn test_from_import_processing() {
         // from os import path; use path

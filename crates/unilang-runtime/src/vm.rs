@@ -216,8 +216,13 @@ impl VM {
                     (RuntimeValue::Float(x), RuntimeValue::Int(y)) => {
                         RuntimeValue::Float(x + *y as f64)
                     }
-                    (RuntimeValue::String(x), RuntimeValue::String(y)) => {
-                        RuntimeValue::String(format!("{}{}", x, y))
+                    // String + anything → coerce to string and concat
+                    (RuntimeValue::String(_), _) | (_, RuntimeValue::String(_)) => {
+                        RuntimeValue::String(format!(
+                            "{}{}",
+                            a.coerce_to_string(),
+                            b.coerce_to_string()
+                        ))
                     }
                     _ => {
                         return Err(RuntimeError::type_error(format!(
