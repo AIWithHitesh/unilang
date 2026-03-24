@@ -12,6 +12,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Command execution
   runCommand: (command, args, cwd) => ipcRenderer.invoke('run-command', command, args, cwd),
 
+  // UniLang CLI path (persisted in userData)
+  getUnilangCliConfig: () => ipcRenderer.invoke('get-unilang-cli-config'),
+  setUnilangCliPath: (absolutePath) => ipcRenderer.invoke('set-unilang-cli-path', absolutePath),
+  pickUnilangCliExecutable: () => ipcRenderer.invoke('pick-unilang-cli-executable'),
+
   // Menu events from main process
   onMenuNewFile: (callback) => ipcRenderer.on('menu-new-file', callback),
   onMenuSave: (callback) => ipcRenderer.on('menu-save', callback),
@@ -23,5 +28,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // Command output streams
   onCommandStdout: (callback) => ipcRenderer.on('command-stdout', (_event, data) => callback(data)),
-  onCommandStderr: (callback) => ipcRenderer.on('command-stderr', (_event, data) => callback(data))
+  onCommandStderr: (callback) => ipcRenderer.on('command-stderr', (_event, data) => callback(data)),
+
+  onUnilangCliStatus: (callback) =>
+    ipcRenderer.on('unilang-cli-status', (_event, payload) => callback(payload))
 });

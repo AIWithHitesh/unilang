@@ -159,8 +159,10 @@ When you open UniLang IDE for the first time:
    print(f"3 + 7 = {result}")
    ```
 
-5. **Run the program:** Click the **Run** button in the toolbar (the green triangle icon), or press `Ctrl + R` / `Cmd + R`.
-6. The output will appear in the **integrated terminal** at the bottom of the screen:
+5. **UniLang CLI path:** The IDE must find the `unilang` binary to Build/Run. On first launch, check the bottom terminal for a line like `UniLang CLI (auto-detected): …`. If Build/Run fails with `command not found`, use **Build → Choose UniLang CLI…** and pick the `unilang` executable (for example `~/.cargo/bin/unilang` or `/usr/local/bin/unilang`). Use **Build → Reset UniLang CLI to Auto-Detect** to clear that choice. You can also set the **`UNILANG_CLI`** environment variable to the full path before starting the IDE. Settings are stored under the app user data folder as `ide-settings.json`.
+
+6. **Run the program:** Click the **Run** button in the toolbar (the green triangle icon), or press `Ctrl + R` / `Cmd + R`.
+7. The output will appear in the **integrated terminal** at the bottom of the screen:
    ```
    Hello from UniLang IDE!
    3 + 7 = 10
@@ -194,9 +196,9 @@ When you open UniLang IDE for the first time:
 ### Build and Run Buttons
 
 - The toolbar at the top includes:
-  - **Build** button (hammer icon): Compiles the current file (`unilang compile`).
+  - **Build** button (hammer icon): Compiles the current file (`unilang build`).
   - **Run** button (green triangle): Runs the current file (`unilang run`).
-  - **Check** button (checkmark icon): Checks the current file for errors (`unilang check`).
+- The **Build** menu also has **Choose UniLang CLI…** and **Reset UniLang CLI to Auto-Detect** so you can set the path to the `unilang` binary when it is not on the GUI app `PATH` (common on macOS).
 
 ### Tabs
 

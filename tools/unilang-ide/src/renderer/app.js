@@ -300,6 +300,13 @@
     window.electronAPI.onCommandStdout((data) => terminal.writeStdout(data));
     window.electronAPI.onCommandStderr((data) => terminal.writeStderr(data));
 
+    if (window.electronAPI.onUnilangCliStatus) {
+      window.electronAPI.onUnilangCliStatus((info) => {
+        const label = info.usesCustomPath ? '(saved path)' : '(auto-detected)';
+        terminal.writeSystem(`UniLang CLI ${label}: ${info.resolvedPath}`);
+      });
+    }
+
     // Menu events
     window.electronAPI.onMenuNewFile(() => newFile());
     window.electronAPI.onMenuSave(() => saveFile());
@@ -345,6 +352,18 @@
 
   // ----- Initialize Everything -----
 
+  async function logUnilangCliOnStartup() {
+    try {
+      if (window.electronAPI.getUnilangCliConfig) {
+        const info = await window.electronAPI.getUnilangCliConfig();
+        const label = info.usesCustomPath ? '(saved path)' : '(auto-detected)';
+        terminal.writeSystem(`UniLang CLI ${label}: ${info.resolvedPath}`);
+      }
+    } catch (_e) {
+      /* ignore */
+    }
+  }
+
   function init() {
     initToolbar();
     initFileTree();
@@ -352,6 +371,7 @@
     initKeyboardShortcuts();
     initIPCListeners();
     terminal.writeSystem('UniLang IDE v0.1.0 ready.');
+    logUnilangCliOnStartup();
     editor.focus();
   }
 

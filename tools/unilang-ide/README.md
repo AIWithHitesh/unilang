@@ -20,6 +20,18 @@ A lightweight, standalone Electron-based IDE for the UniLang programming languag
 
 - [Node.js](https://nodejs.org/) >= 18
 - npm >= 9
+- **UniLang CLI** (`unilang` binary) on your PATH, or configure it inside the IDE: **Build → Choose UniLang CLI…** (saved in user data). You can also set **`UNILANG_CLI`** to the full path before launching the IDE.
+
+### macOS: “unverified developer” / Gatekeeper
+
+CI and local builds are **not Apple-notarized**. Remove quarantine on the `.app` or CLI binary if macOS blocks them, for example:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/UniLang IDE.app"
+xattr -dr com.apple.quarantine /usr/local/bin/unilang
+```
+
+Or use **System Settings → Privacy & Security → Open Anyway**. The IDE also has **Help → macOS: Gatekeeper (unsigned app & CLI)…** with the same guidance. A fully trusted install requires **Developer ID signing + notarization** (paid Apple Developer Program).
 
 ## Getting Started
 
@@ -95,6 +107,7 @@ The IDE uses Electron's main/renderer process model with `contextIsolation` enab
 - **File I/O**: `readFile`, `saveFile`, `readDirectory`
 - **Dialogs**: `openFileDialog`, `openFolderDialog`, `saveFileDialog`
 - **Commands**: `runCommand` (spawns child processes, streams stdout/stderr back)
+- **UniLang CLI path**: `getUnilangCliConfig`, `setUnilangCliPath`, `pickUnilangCliExecutable`, `onUnilangCliStatus`
 - **Menu Events**: menu actions are forwarded from main to renderer via IPC
 
 The code editor uses a textarea overlaid with a syntax-highlighted `<div>` -- no external editor library required.

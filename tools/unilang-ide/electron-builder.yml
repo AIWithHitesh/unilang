@@ -6,6 +6,9 @@ directories:
   output: dist/
   buildResources: build/
 
+# Ad-hoc sign .app on macOS after pack (see scripts/after-pack.cjs).
+afterPack: scripts/after-pack.cjs
+
 files:
   - src/**/*
   - package.json

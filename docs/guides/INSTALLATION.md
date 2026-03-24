@@ -36,10 +36,13 @@ This is the easiest way to install UniLang on macOS.
    sudo cp /Volumes/UniLang/unilang-lsp /usr/local/bin/
    ```
 6. Eject the DMG by right-clicking the mounted volume in Finder and selecting "Eject."
-7. If macOS blocks the app with a message like "unilang can't be opened because it is from an unidentified developer":
-   - Go to **System Preferences** (or **System Settings** on macOS Ventura+).
-   - Click **Privacy & Security**.
-   - Scroll down and click **"Open Anyway"** next to the UniLang message.
+7. If macOS blocks the binaries with **"developer cannot be verified"**, **"unidentified developer"**, or similar (normal for unsigned builds from GitHub):
+   - **Remove the quarantine flag** (recommended), adjusting paths if you did not use `/usr/local/bin/`:
+     ```bash
+     xattr -dr com.apple.quarantine /usr/local/bin/unilang
+     xattr -dr com.apple.quarantine /usr/local/bin/unilang-lsp
+     ```
+   - **Or** open **System Settings** → **Privacy & Security** → find the blocked item → **Open Anyway**.
 8. Open a terminal and verify the installation:
    ```bash
    unilang --version
@@ -63,7 +66,12 @@ This is the easiest way to install UniLang on macOS.
    ```bash
    sudo cp unilang-cli-*/bin/* /usr/local/bin/
    ```
-6. Verify the installation:
+6. If macOS shows **developer cannot be verified** when you first run the binaries, run (adjust paths if needed):
+   ```bash
+   xattr -dr com.apple.quarantine /usr/local/bin/unilang
+   xattr -dr com.apple.quarantine /usr/local/bin/unilang-lsp
+   ```
+7. Verify the installation:
    ```bash
    unilang --version
    ```
