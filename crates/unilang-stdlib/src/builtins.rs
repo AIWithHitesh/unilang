@@ -47,8 +47,28 @@ pub fn register_all(vm: &mut VM) {
 
     // Utility
     vm.register_builtin("hash", builtin_hash);
+    vm.register_builtin("id", builtin_id);
+
+    // Aggregates
+    vm.register_builtin("sum", builtin_sum);
+    vm.register_builtin("any", builtin_any);
+    vm.register_builtin("all", builtin_all);
+
+    // Character conversion
+    vm.register_builtin("chr", builtin_chr);
+    vm.register_builtin("ord", builtin_ord);
+
+    // Collection constructors
+    vm.register_builtin("list", builtin_list);
+    vm.register_builtin("dict", builtin_dict);
+
+    // I/O extras
+    vm.register_builtin("format", builtin_format);
 
     vm.set_global("System", java_lang_system());
+    vm.set_global("None", RuntimeValue::Null);
+    vm.set_global("True", RuntimeValue::Bool(true));
+    vm.set_global("False", RuntimeValue::Bool(false));
 }
 
 fn builtin_print(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
@@ -205,4 +225,138 @@ fn builtin_hash(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
         }
     }
     Ok(RuntimeValue::Int(hasher.finish() as i64))
+}
+
+fn builtin_id(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let val = args.first().ok_or_else(|| RuntimeError::type_error("id() requires 1 argument"))?;
+    // Return a stable integer representation.
+    let id = match val {
+        RuntimeValue::Int(n) => *n,
+        RuntimeValue::Bool(b) => if *b { 1 } else { 0 },
+        _ => 0,
+    };
+    Ok(RuntimeValue::Int(id))
+}
+
+fn builtin_sum(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let val = args.first().ok_or_else(|| RuntimeError::type_error("sum() requires 1 argument"))?;
+    match val {
+        RuntimeValue::List(items) => {
+            let mut total_int: i64 = 0;
+            let mut total_float: f64 = 0.0;
+            let mut has_float = false;
+            for item in items {
+                match item {
+                    RuntimeValue::Int(n) => { total_int += n; total_float += *n as f64; }
+                    RuntimeValue::Float(f) => { total_float += f; has_float = true; }
+                    _ => return Err(RuntimeError::type_error(format!("sum() element '{}' is not numeric", item))),
+                }
+            }
+            if has_float {
+                Ok(RuntimeValue::Float(total_float))
+            } else {
+                Ok(RuntimeValue::Int(total_int))
+            }
+        }
+        _ => Err(RuntimeError::type_error("sum() requires a list")),
+    }
+}
+
+fn builtin_any(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let val = args.first().ok_or_else(|| RuntimeError::type_error("any() requires 1 argument"))?;
+    match val {
+        RuntimeValue::List(items) => Ok(RuntimeValue::Bool(items.iter().any(|v| v.is_truthy()))),
+        _ => Err(RuntimeError::type_error("any() requires a list")),
+    }
+}
+
+fn builtin_all(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let val = args.first().ok_or_else(|| RuntimeError::type_error("all() requires 1 argument"))?;
+    match val {
+        RuntimeValue::List(items) => Ok(RuntimeValue::Bool(items.iter().all(|v| v.is_truthy()))),
+        _ => Err(RuntimeError::type_error("all() requires a list")),
+    }
+}
+
+fn builtin_chr(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let n = args.first().and_then(|v| v.as_int())
+        .ok_or_else(|| RuntimeError::type_error("chr() requires an integer argument"))?;
+    let c = char::from_u32(n as u32)
+        .ok_or_else(|| RuntimeError::type_error(format!("chr() argument {} is not a valid Unicode code point", n)))?;
+    Ok(RuntimeValue::String(c.to_string()))
+}
+
+fn builtin_ord(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let s = args.first().and_then(|v| v.as_string())
+        .ok_or_else(|| RuntimeError::type_error("ord() requires a string argument"))?;
+    let mut chars = s.chars();
+    let c = chars.next().ok_or_else(|| RuntimeError::type_error("ord() argument is an empty string"))?;
+    if chars.next().is_some() {
+        return Err(RuntimeError::type_error("ord() expects a single character, not a multi-character string"));
+    }
+    Ok(RuntimeValue::Int(c as i64))
+}
+
+fn builtin_list(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    match args.first() {
+        None => Ok(RuntimeValue::List(Vec::new())),
+        Some(RuntimeValue::List(items)) => Ok(RuntimeValue::List(items.clone())),
+        Some(RuntimeValue::String(s)) => {
+            Ok(RuntimeValue::List(s.chars().map(|c| RuntimeValue::String(c.to_string())).collect()))
+        }
+        Some(RuntimeValue::Dict(pairs)) => {
+            Ok(RuntimeValue::List(pairs.iter().map(|(k, _)| k.clone()).collect()))
+        }
+        Some(other) => Err(RuntimeError::type_error(format!("list() cannot convert '{}'", other))),
+    }
+}
+
+fn builtin_dict(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    match args.first() {
+        None => Ok(RuntimeValue::Dict(Vec::new())),
+        Some(RuntimeValue::Dict(pairs)) => Ok(RuntimeValue::Dict(pairs.clone())),
+        Some(RuntimeValue::List(items)) => {
+            // list of [key, value] pairs
+            let mut pairs = Vec::new();
+            for item in items {
+                match item {
+                    RuntimeValue::List(pair) if pair.len() >= 2 => {
+                        pairs.push((pair[0].clone(), pair[1].clone()));
+                    }
+                    _ => return Err(RuntimeError::type_error("dict() list must contain [key, value] pairs")),
+                }
+            }
+            Ok(RuntimeValue::Dict(pairs))
+        }
+        Some(other) => Err(RuntimeError::type_error(format!("dict() cannot convert '{}'", other))),
+    }
+}
+
+fn builtin_format(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    if args.is_empty() {
+        return Err(RuntimeError::type_error("format() requires at least 1 argument"));
+    }
+    // Simple positional format: format("{} + {} = {}", a, b, c)
+    let template = args[0].as_string()
+        .ok_or_else(|| RuntimeError::type_error("format() first argument must be a string"))?
+        .to_string();
+    let mut result = String::new();
+    let mut arg_idx = 1;
+    let mut chars = template.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '{' {
+            if chars.peek() == Some(&'}') {
+                chars.next();
+                if arg_idx < args.len() {
+                    result.push_str(&format!("{}", args[arg_idx]));
+                    arg_idx += 1;
+                }
+            } else {
+                result.push(c);
+            }
+        } else {
+            result.push(c);
+        }
+    }
+    Ok(RuntimeValue::String(result))
 }

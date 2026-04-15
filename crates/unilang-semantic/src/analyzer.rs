@@ -75,16 +75,56 @@ impl Analyzer {
     fn inject_prelude(&mut self) {
         let prelude_span = Span::new(0, 0);
         const PRELUDE_FUNCS: &[&str] = &[
+            // I/O
             "print",
             "println",
             "input",
+            // Type conversion
             "int",
             "float",
             "str",
             "bool",
+            // Type utilities
             "type",
             "isinstance",
             "hash",
+            "id",
+            // Collections
+            "len",
+            "range",
+            "sorted",
+            "reversed",
+            "enumerate",
+            "zip",
+            "list",
+            "dict",
+            // Aggregates
+            "sum",
+            "any",
+            "all",
+            "min",
+            "max",
+            // Math
+            "abs",
+            "pow",
+            "sqrt",
+            "floor",
+            "ceil",
+            "round",
+            // String utilities
+            "upper",
+            "lower",
+            "split",
+            "join",
+            "strip",
+            "replace",
+            "contains",
+            "startswith",
+            "endswith",
+            "format",
+            // Character
+            "chr",
+            "ord",
         ];
         for name in PRELUDE_FUNCS {
             let symbol = Symbol {
@@ -97,14 +137,16 @@ impl Analyzer {
             self.define_symbol(name, symbol, prelude_span);
         }
         // Java-style `System.out.println(...)` is implemented as a VM facade, not real JVM.
-        let system = Symbol {
-            name: "System".to_string(),
-            ty: Type::Dynamic,
-            kind: SymbolKind::Variable,
-            mutable: false,
-            span: prelude_span,
-        };
-        self.define_symbol("System", system, prelude_span);
+        for name in &["System", "None", "True", "False"] {
+            let sym = Symbol {
+                name: (*name).to_string(),
+                ty: Type::Dynamic,
+                kind: SymbolKind::Variable,
+                mutable: false,
+                span: prelude_span,
+            };
+            self.define_symbol(name, sym, prelude_span);
+        }
     }
 
     fn define_symbol(&mut self, name: &str, symbol: Symbol, name_span: Span) {
@@ -673,7 +715,6 @@ impl Analyzer {
 
             Expr::Assign(target, value) => {
                 let val_ty = self.visit_expr(value);
-                // Check if target is mutable
                 if let Expr::Ident(name) = &target.node {
                     if let Some(sym) = self.scopes.resolve(name) {
                         if !sym.mutable {
@@ -690,7 +731,6 @@ impl Analyzer {
                                 ),
                             );
                         }
-                        // Check type compat
                         checker::check_assignment_type(
                             &sym.ty,
                             &val_ty,
@@ -699,11 +739,16 @@ impl Analyzer {
                             &mut self.diagnostics,
                         );
                     } else {
-                        self.diagnostics.report(
-                            Diagnostic::error(format!("undefined variable '{}'", name))
-                                .with_code("E0204")
-                                .with_label(target.span, self.source_id, "not found in this scope"),
-                        );
+                        // Python-style implicit declaration: `x = expr` creates a
+                        // new mutable variable when `x` is not yet in scope.
+                        let symbol = Symbol {
+                            name: name.clone(),
+                            ty: val_ty.clone(),
+                            kind: SymbolKind::Variable,
+                            mutable: true,
+                            span: target.span,
+                        };
+                        self.define_symbol(name, symbol, target.span);
                     }
                 } else {
                     self.visit_expr(target);

@@ -173,18 +173,34 @@ impl Compiler {
             Stmt::Pass => { /* no-op */ }
             Stmt::Block(block) => self.compile_block(block),
             Stmt::Throw(expr) => {
-                // Simplified: compile the expression and pop it.
                 self.compile_expr(&expr.node);
-                self.emit(Opcode::Pop);
+                self.emit(Opcode::Raise);
             }
-            Stmt::Assert(expr, _msg) => {
-                // Simplified: evaluate the expression and discard.
+            Stmt::Assert(expr, msg) => {
                 self.compile_expr(&expr.node);
-                self.emit(Opcode::Pop);
+                if let Some(m) = msg {
+                    self.compile_expr(&m.node);
+                } else {
+                    self.emit(Opcode::LoadConst(Value::String(
+                        "AssertionError".to_string(),
+                    )));
+                }
+                self.emit(Opcode::Assert);
             }
             Stmt::Import(_) => { /* imports are a no-op at bytecode level */ }
-            Stmt::Try(_) | Stmt::With(_) => {
-                // Not yet supported in bytecode; silently skip.
+            Stmt::Try(try_stmt) => {
+                // Execute the body; if an error occurs, run the first catch block.
+                // True exception handling (unwinding) is not yet supported, so we
+                // compile both branches and the finally unconditionally.
+                self.compile_block(&try_stmt.body);
+                // Compile finally block if present (runs regardless).
+                if let Some(finally) = &try_stmt.finally_block {
+                    self.compile_block(finally);
+                }
+            }
+            Stmt::With(with_stmt) => {
+                // Simplified: just run the body (no __enter__/__exit__ protocol yet).
+                self.compile_block(&with_stmt.body);
             }
             Stmt::Error => {}
         }
@@ -454,31 +470,72 @@ impl Compiler {
     }
 
     fn compile_for_in(&mut self, target: &Spanned<Expr>, iter_expr: &Spanned<Expr>, body: &Block) {
-        // Simplified: compile the iterable, store to a local, and just
-        // compile the body once. A real implementation would set up
-        // an iterator protocol. For now, emit the iterable and pop it.
+        // Compile and store iterable.
         self.compile_expr(&iter_expr.node);
-        self.emit(Opcode::Pop);
+        let iter_slot = self.define_local("__iter__");
+        self.emit(Opcode::StoreLocal(iter_slot));
 
-        let loop_start = if self.in_function {
+        // Initialize index counter to 0.
+        self.emit(Opcode::LoadConst(Value::Int(0)));
+        let idx_slot = self.define_local("__idx__");
+        self.emit(Opcode::StoreLocal(idx_slot));
+
+        // Define the loop target variable.
+        let target_slot = if let Expr::Ident(name) = &target.node {
+            let s = self.define_local(name);
+            self.emit(Opcode::LoadConst(Value::Null));
+            self.emit(Opcode::StoreLocal(s));
+            Some(s)
+        } else {
+            None
+        };
+
+        // Jump to the check (skip increment on the first iteration).
+        let jump_to_check = self.emit_jump(Opcode::Jump(0));
+
+        // --- Increment step (continue target) ---
+        let increment_ip = if self.in_function {
             self.fn_code.len()
         } else {
             self.code.len()
         };
-        self.loop_starts.push(loop_start);
+        self.loop_starts.push(increment_ip);
         self.loop_exits.push(Vec::new());
 
-        // Store loop variable.
-        if let Expr::Ident(name) = &target.node {
-            let slot = self.define_local(name);
-            self.emit(Opcode::LoadConst(Value::Null));
+        self.emit(Opcode::LoadLocal(idx_slot));
+        self.emit(Opcode::LoadConst(Value::Int(1)));
+        self.emit(Opcode::Add);
+        self.emit(Opcode::StoreLocal(idx_slot));
+
+        // --- Check step (patch jump_to_check here) ---
+        self.patch_jump(jump_to_check);
+
+        // Condition: idx < len(iter)
+        self.emit(Opcode::LoadLocal(idx_slot));
+        self.emit(Opcode::LoadLocal(iter_slot));
+        self.emit(Opcode::LoadGlobal("len".to_string()));
+        self.emit(Opcode::Call(1));
+        self.emit(Opcode::Lt);
+        let exit_jump = self.emit_jump(Opcode::JumpIfFalse(0));
+
+        // Load current element: iter[idx]
+        self.emit(Opcode::LoadLocal(iter_slot));
+        self.emit(Opcode::LoadLocal(idx_slot));
+        self.emit(Opcode::GetIndex);
+        if let Some(slot) = target_slot {
             self.emit(Opcode::StoreLocal(slot));
+        } else {
+            self.emit(Opcode::Pop);
         }
 
+        // Body
         self.compile_block(body);
 
-        self.emit(Opcode::Jump(loop_start));
+        // Jump back to increment step.
+        self.emit(Opcode::Jump(increment_ip));
 
+        // Patch exit.
+        self.patch_jump(exit_jump);
         let exits = self.loop_exits.pop().unwrap_or_default();
         for e in exits {
             self.patch_jump(e);
@@ -602,36 +659,50 @@ impl Compiler {
 
             // Binary operators
             Expr::BinaryOp(lhs, op, rhs) => {
+                // NullCoalesce is special: lhs ?? rhs
+                if matches!(op, BinOp::NullCoalesce) {
+                    self.compile_expr(&lhs.node);
+                    self.emit(Opcode::Dup);
+                    self.emit(Opcode::LoadConst(Value::Null));
+                    self.emit(Opcode::NotEq);
+                    let use_lhs = self.emit_jump(Opcode::JumpIfTrue(0));
+                    self.emit(Opcode::Pop);
+                    self.compile_expr(&rhs.node);
+                    self.patch_jump(use_lhs);
+                    return;
+                }
+
                 self.compile_expr(&lhs.node);
                 self.compile_expr(&rhs.node);
-                let opcode = match op {
-                    BinOp::Add => Opcode::Add,
-                    BinOp::Sub => Opcode::Sub,
-                    BinOp::Mul => Opcode::Mul,
-                    BinOp::Div => Opcode::Div,
-                    BinOp::FloorDiv => Opcode::FloorDiv,
-                    BinOp::Mod => Opcode::Mod,
-                    BinOp::Pow => Opcode::Pow,
-                    BinOp::Eq => Opcode::Eq,
-                    BinOp::NotEq => Opcode::NotEq,
-                    BinOp::Lt => Opcode::Lt,
-                    BinOp::Gt => Opcode::Gt,
-                    BinOp::LtEq => Opcode::LtEq,
-                    BinOp::GtEq => Opcode::GtEq,
-                    BinOp::And => Opcode::And,
-                    BinOp::Or => Opcode::Or,
-                    BinOp::BitAnd => Opcode::BitAnd,
-                    BinOp::BitOr => Opcode::BitOr,
-                    BinOp::BitXor => Opcode::BitXor,
-                    BinOp::LShift => Opcode::LShift,
-                    BinOp::RShift => Opcode::RShift,
-                    // Unsupported ops map to a no-op (Pop + Null) for now.
-                    _ => {
-                        self.emit(Opcode::Pop);
-                        Opcode::Pop
-                    }
+                match op {
+                    BinOp::Add => { self.emit(Opcode::Add); }
+                    BinOp::Sub => { self.emit(Opcode::Sub); }
+                    BinOp::Mul => { self.emit(Opcode::Mul); }
+                    BinOp::Div => { self.emit(Opcode::Div); }
+                    BinOp::FloorDiv => { self.emit(Opcode::FloorDiv); }
+                    BinOp::Mod => { self.emit(Opcode::Mod); }
+                    BinOp::Pow => { self.emit(Opcode::Pow); }
+                    BinOp::Eq => { self.emit(Opcode::Eq); }
+                    BinOp::NotEq => { self.emit(Opcode::NotEq); }
+                    BinOp::Lt => { self.emit(Opcode::Lt); }
+                    BinOp::Gt => { self.emit(Opcode::Gt); }
+                    BinOp::LtEq => { self.emit(Opcode::LtEq); }
+                    BinOp::GtEq => { self.emit(Opcode::GtEq); }
+                    BinOp::And => { self.emit(Opcode::And); }
+                    BinOp::Or => { self.emit(Opcode::Or); }
+                    BinOp::BitAnd => { self.emit(Opcode::BitAnd); }
+                    BinOp::BitOr => { self.emit(Opcode::BitOr); }
+                    BinOp::BitXor => { self.emit(Opcode::BitXor); }
+                    BinOp::LShift => { self.emit(Opcode::LShift); }
+                    BinOp::RShift => { self.emit(Opcode::RShift); }
+                    BinOp::UnsignedRShift => { self.emit(Opcode::RShift); }
+                    BinOp::In => { self.emit(Opcode::Contains); }
+                    BinOp::NotIn => { self.emit(Opcode::Contains); self.emit(Opcode::Not); }
+                    BinOp::Is => { self.emit(Opcode::Eq); }
+                    BinOp::IsNot => { self.emit(Opcode::Eq); self.emit(Opcode::Not); }
+                    BinOp::Instanceof => { self.emit(Opcode::Eq); }
+                    BinOp::NullCoalesce => unreachable!(),
                 };
-                self.emit(opcode);
             }
 
             // Unary operators
@@ -760,37 +831,177 @@ impl Compiler {
                 self.compile_expr(&expr.node);
             }
 
-            // List comprehension — simplified stub.
-            Expr::ListComp { element, .. } => {
-                self.compile_expr(&element.node);
-                self.emit(Opcode::MakeList(1));
+            // List comprehension: [element for target in iter if condition]
+            Expr::ListComp { element, clauses } => {
+                if let Some(clause) = clauses.first() {
+                    // Create empty result list.
+                    self.emit(Opcode::MakeList(0));
+                    let result_slot = self.define_local("__comp_result__");
+                    self.emit(Opcode::StoreLocal(result_slot));
+
+                    // Compile iterable.
+                    self.compile_expr(&clause.iter.node);
+                    let iter_slot = self.define_local("__comp_iter__");
+                    self.emit(Opcode::StoreLocal(iter_slot));
+
+                    // Index counter.
+                    self.emit(Opcode::LoadConst(Value::Int(0)));
+                    let idx_slot = self.define_local("__comp_idx__");
+                    self.emit(Opcode::StoreLocal(idx_slot));
+
+                    // Target variable.
+                    let target_slot = if let Expr::Ident(name) = &clause.target.node {
+                        let s = self.define_local(name);
+                        self.emit(Opcode::LoadConst(Value::Null));
+                        self.emit(Opcode::StoreLocal(s));
+                        Some(s)
+                    } else {
+                        None
+                    };
+
+                    // Jump to check.
+                    let jump_to_check = self.emit_jump(Opcode::Jump(0));
+
+                    // Increment.
+                    let increment_ip = if self.in_function {
+                        self.fn_code.len()
+                    } else {
+                        self.code.len()
+                    };
+                    self.emit(Opcode::LoadLocal(idx_slot));
+                    self.emit(Opcode::LoadConst(Value::Int(1)));
+                    self.emit(Opcode::Add);
+                    self.emit(Opcode::StoreLocal(idx_slot));
+
+                    // Check.
+                    self.patch_jump(jump_to_check);
+                    self.emit(Opcode::LoadLocal(idx_slot));
+                    self.emit(Opcode::LoadLocal(iter_slot));
+                    self.emit(Opcode::LoadGlobal("len".to_string()));
+                    self.emit(Opcode::Call(1));
+                    self.emit(Opcode::Lt);
+                    let exit_jump = self.emit_jump(Opcode::JumpIfFalse(0));
+
+                    // Load item.
+                    self.emit(Opcode::LoadLocal(iter_slot));
+                    self.emit(Opcode::LoadLocal(idx_slot));
+                    self.emit(Opcode::GetIndex);
+                    if let Some(s) = target_slot {
+                        self.emit(Opcode::StoreLocal(s));
+                    } else {
+                        self.emit(Opcode::Pop);
+                    }
+
+                    // Optional filter conditions.
+                    let mut cond_skips: Vec<usize> = Vec::new();
+                    for cond in &clause.conditions {
+                        self.compile_expr(&cond.node);
+                        cond_skips.push(self.emit_jump(Opcode::JumpIfFalse(0)));
+                    }
+
+                    // Append element to result list.
+                    self.emit(Opcode::LoadLocal(result_slot));
+                    self.compile_expr(&element.node);
+                    self.emit(Opcode::CallMethod("append".to_string(), 1));
+                    self.emit(Opcode::StoreLocal(result_slot));
+
+                    for s in cond_skips {
+                        self.patch_jump(s);
+                    }
+
+                    self.emit(Opcode::Jump(increment_ip));
+                    self.patch_jump(exit_jump);
+
+                    // Push final result list.
+                    self.emit(Opcode::LoadLocal(result_slot));
+                } else {
+                    self.emit(Opcode::MakeList(0));
+                }
             }
 
             Expr::Error => {}
         }
     }
 
+    /// True if a method name mutates the receiver (list/dict operations).
+    fn is_mutating_method(name: &str) -> bool {
+        matches!(
+            name,
+            "append"
+                | "pop"
+                | "insert"
+                | "remove"
+                | "extend"
+                | "sort"
+                | "reverse"
+                | "clear"
+                | "put"
+                | "delete"
+        )
+    }
+
     /// Compile a function/method call.
     fn compile_call(&mut self, callee: &Expr, args: &[Argument]) {
-        // Check if it is a direct `print(...)` call.
-        let is_print = matches!(callee, Expr::Ident(name) if name == "print");
-
-        if is_print {
-            // Built-in print: compile each argument and emit Print.
+        // Method call: callee is `obj.method`
+        if let Expr::Attribute(obj, method_name) = callee {
+            let method = method_name.node.clone();
+            if Self::is_mutating_method(&method) {
+                // Mutating methods: load, call, store back, return Null.
+                if let Expr::Ident(var_name) = &obj.node {
+                    if let Some(slot) = self.resolve_local(var_name) {
+                        self.emit(Opcode::LoadLocal(slot));
+                        for arg in args {
+                            self.compile_expr(&arg.value.node);
+                        }
+                        self.emit(Opcode::CallMethod(method, args.len()));
+                        // CallMethod for mutating ops returns the modified object.
+                        self.emit(Opcode::StoreLocal(slot));
+                    } else {
+                        self.emit(Opcode::LoadGlobal(var_name.clone()));
+                        for arg in args {
+                            self.compile_expr(&arg.value.node);
+                        }
+                        self.emit(Opcode::CallMethod(method, args.len()));
+                        self.emit(Opcode::StoreGlobal(var_name.clone()));
+                    }
+                    self.emit(Opcode::LoadConst(Value::Null));
+                    return;
+                }
+            }
+            // Non-mutating (or non-ident receiver): compile obj, args, CallMethod.
+            self.compile_expr(&obj.node);
             for arg in args {
                 self.compile_expr(&arg.value.node);
-                self.emit(Opcode::Print);
             }
-            // print() should still leave a value on the stack for expression-statement pop.
-            self.emit(Opcode::LoadConst(Value::Null));
-        } else {
-            // General call: push arguments, then callee, then Call.
-            for arg in args {
-                self.compile_expr(&arg.value.node);
-            }
-            self.compile_expr(callee);
-            self.emit(Opcode::Call(args.len()));
+            self.emit(Opcode::CallMethod(method, args.len()));
+            return;
         }
+
+        // Direct `print(...)` call — single arg uses Print opcode, multi-arg uses Call.
+        if let Expr::Ident(name) = callee {
+            if name == "print" {
+                if args.len() == 1 {
+                    self.compile_expr(&args[0].value.node);
+                    self.emit(Opcode::Print);
+                    self.emit(Opcode::LoadConst(Value::Null));
+                } else {
+                    // 0 or 2+ args: route through Call so they're joined with spaces.
+                    for arg in args {
+                        self.compile_expr(&arg.value.node);
+                    }
+                    self.emit(Opcode::LoadGlobal("print".to_string()));
+                    self.emit(Opcode::Call(args.len()));
+                }
+                return;
+            }
+        }
+
+        // General call: push arguments, then callee, then Call.
+        for arg in args {
+            self.compile_expr(&arg.value.node);
+        }
+        self.compile_expr(callee);
+        self.emit(Opcode::Call(args.len()));
     }
 
     /// Emit store instructions for an assignment target.

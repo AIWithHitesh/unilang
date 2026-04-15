@@ -732,6 +732,56 @@ impl VM {
                 self.output.push(text);
             }
 
+            // ── Method calls ─────────────────────────────────
+            Opcode::CallMethod(ref name, n_args) => {
+                let name = name.clone();
+                let mut args = Vec::with_capacity(n_args);
+                for _ in 0..n_args {
+                    args.push(self.pop()?);
+                }
+                args.reverse();
+                let obj = self.pop()?;
+                let result = self.dispatch_method(obj, &name, &args)?;
+                self.push(result);
+            }
+
+            // ── Membership test ──────────────────────────────
+            Opcode::Contains => {
+                let container = self.pop()?;
+                let item = self.pop()?;
+                let found = match &container {
+                    RuntimeValue::List(items) => items.contains(&item),
+                    RuntimeValue::String(s) => match &item {
+                        RuntimeValue::String(sub) => s.contains(sub.as_str()),
+                        _ => false,
+                    },
+                    RuntimeValue::Dict(pairs) => pairs.iter().any(|(k, _)| k == &item),
+                    _ => false,
+                };
+                self.push(RuntimeValue::Bool(found));
+            }
+
+            // ── Assertions & exceptions ──────────────────────
+            Opcode::Assert => {
+                let msg = self.pop()?;
+                let cond = self.pop()?;
+                if !cond.is_truthy() {
+                    let msg_str = format!("{}", msg);
+                    return Err(RuntimeError::new(
+                        crate::error::ErrorKind::AssertionError,
+                        msg_str,
+                    ));
+                }
+            }
+
+            Opcode::Raise => {
+                let val = self.pop()?;
+                return Err(RuntimeError::new(
+                    crate::error::ErrorKind::Exception,
+                    format!("{}", val),
+                ));
+            }
+
             // ── Halt ─────────────────────────────────────────
             Opcode::Halt => {
                 return Err(RuntimeError::halt());
@@ -739,6 +789,266 @@ impl VM {
         }
 
         Ok(true)
+    }
+
+    /// Dispatch a method call — routes to String / List / Dict / Instance handlers.
+    fn dispatch_method(
+        &mut self,
+        obj: RuntimeValue,
+        name: &str,
+        args: &[RuntimeValue],
+    ) -> Result<RuntimeValue, RuntimeError> {
+        match obj {
+            RuntimeValue::String(s) => Self::string_method(s, name, args),
+            RuntimeValue::List(items) => Self::list_method(items, name, args),
+            RuntimeValue::Dict(pairs) => Self::dict_method(pairs, name, args),
+            RuntimeValue::Instance(ref data) => {
+                // Try field lookup first (e.g. System.out.println).
+                if let Some(val) = data.fields.get(name).cloned() {
+                    match val {
+                        RuntimeValue::NativeFunction(fn_name) => {
+                            self.call_builtin(&fn_name, args)
+                        }
+                        other => Ok(other),
+                    }
+                } else {
+                    Err(RuntimeError::attribute_error(name))
+                }
+            }
+            _ => Err(RuntimeError::type_error(format!(
+                "'{}' has no method '{}'",
+                obj, name
+            ))),
+        }
+    }
+
+    // ── String method dispatch ────────────────────────────────
+
+    fn string_method(s: String, name: &str, args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+        match name {
+            "upper" | "toUpperCase" => Ok(RuntimeValue::String(s.to_uppercase())),
+            "lower" | "toLowerCase" => Ok(RuntimeValue::String(s.to_lowercase())),
+            "strip" | "trim" => Ok(RuntimeValue::String(s.trim().to_string())),
+            "lstrip" | "trimLeft" | "trimStart" => Ok(RuntimeValue::String(s.trim_start().to_string())),
+            "rstrip" | "trimRight" | "trimEnd" => Ok(RuntimeValue::String(s.trim_end().to_string())),
+            "capitalize" => {
+                let mut c = s.chars();
+                let r = match c.next() {
+                    None => String::new(),
+                    Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                };
+                Ok(RuntimeValue::String(r))
+            }
+            "title" => {
+                let r = s.split_whitespace()
+                    .map(|w| {
+                        let mut c = w.chars();
+                        match c.next() {
+                            None => String::new(),
+                            Some(f) => f.to_uppercase().to_string() + c.as_str(),
+                        }
+                    })
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                Ok(RuntimeValue::String(r))
+            }
+            "split" => {
+                let sep = args.first().and_then(|a| a.as_string()).unwrap_or(" ").to_string();
+                let parts: Vec<RuntimeValue> = if sep.is_empty() {
+                    s.chars().map(|c| RuntimeValue::String(c.to_string())).collect()
+                } else {
+                    s.split(sep.as_str()).map(|p| RuntimeValue::String(p.to_string())).collect()
+                };
+                Ok(RuntimeValue::List(parts))
+            }
+            "join" => {
+                let list = args.first().ok_or_else(|| RuntimeError::type_error("join() requires a list"))?;
+                match list {
+                    RuntimeValue::List(items) => {
+                        let r = items.iter().map(|v| format!("{}", v)).collect::<Vec<_>>().join(&s);
+                        Ok(RuntimeValue::String(r))
+                    }
+                    _ => Err(RuntimeError::type_error("join() requires a list")),
+                }
+            }
+            "replace" => {
+                if args.len() < 2 { return Err(RuntimeError::type_error("replace() requires 2 arguments")); }
+                let old = args[0].as_string().ok_or_else(|| RuntimeError::type_error("replace() args must be strings"))?;
+                let new = args[1].as_string().ok_or_else(|| RuntimeError::type_error("replace() args must be strings"))?;
+                Ok(RuntimeValue::String(s.replace(old, new)))
+            }
+            "contains" | "includes" => {
+                let sub = args.first().and_then(|a| a.as_string())
+                    .ok_or_else(|| RuntimeError::type_error("contains() requires a string"))?;
+                Ok(RuntimeValue::Bool(s.contains(sub)))
+            }
+            "startswith" | "startsWith" => {
+                let p = args.first().and_then(|a| a.as_string())
+                    .ok_or_else(|| RuntimeError::type_error("startswith() requires a string"))?;
+                Ok(RuntimeValue::Bool(s.starts_with(p)))
+            }
+            "endswith" | "endsWith" => {
+                let p = args.first().and_then(|a| a.as_string())
+                    .ok_or_else(|| RuntimeError::type_error("endswith() requires a string"))?;
+                Ok(RuntimeValue::Bool(s.ends_with(p)))
+            }
+            "find" | "indexOf" => {
+                let sub = args.first().and_then(|a| a.as_string())
+                    .ok_or_else(|| RuntimeError::type_error("find() requires a string"))?;
+                Ok(RuntimeValue::Int(s.find(sub).map(|i| i as i64).unwrap_or(-1)))
+            }
+            "count" => {
+                let sub = args.first().and_then(|a| a.as_string())
+                    .ok_or_else(|| RuntimeError::type_error("count() requires a string"))?;
+                Ok(RuntimeValue::Int(s.matches(sub).count() as i64))
+            }
+            "len" | "length" | "size" => Ok(RuntimeValue::Int(s.chars().count() as i64)),
+            "isdigit" | "isDigit" => Ok(RuntimeValue::Bool(!s.is_empty() && s.chars().all(|c| c.is_ascii_digit()))),
+            "isalpha" | "isAlpha" => Ok(RuntimeValue::Bool(!s.is_empty() && s.chars().all(|c| c.is_alphabetic()))),
+            "isalnum" => Ok(RuntimeValue::Bool(!s.is_empty() && s.chars().all(|c| c.is_alphanumeric()))),
+            "isspace" => Ok(RuntimeValue::Bool(!s.is_empty() && s.chars().all(|c| c.is_whitespace()))),
+            "isupper" => Ok(RuntimeValue::Bool(!s.is_empty() && s.chars().all(|c| c.is_uppercase()))),
+            "islower" => Ok(RuntimeValue::Bool(!s.is_empty() && s.chars().all(|c| c.is_lowercase()))),
+            "repeat" => {
+                let n = args.first().and_then(|a| a.as_int())
+                    .ok_or_else(|| RuntimeError::type_error("repeat() requires an integer"))?;
+                Ok(RuntimeValue::String(s.repeat(n.max(0) as usize)))
+            }
+            "substring" | "slice" => {
+                let start = args.first().and_then(|a| a.as_int()).unwrap_or(0) as usize;
+                let end = args.get(1).and_then(|a| a.as_int()).unwrap_or(s.len() as i64) as usize;
+                let chars: Vec<char> = s.chars().collect();
+                let end = end.min(chars.len());
+                let start = start.min(end);
+                Ok(RuntimeValue::String(chars[start..end].iter().collect()))
+            }
+            "charAt" => {
+                let idx = args.first().and_then(|a| a.as_int())
+                    .ok_or_else(|| RuntimeError::type_error("charAt() requires an integer"))?;
+                let ch = s.chars().nth(idx as usize)
+                    .ok_or_else(|| RuntimeError::index_out_of_bounds(idx, s.len()))?;
+                Ok(RuntimeValue::String(ch.to_string()))
+            }
+            _ => Err(RuntimeError::type_error(format!("'str' has no method '{}'", name))),
+        }
+    }
+
+    // ── List method dispatch ──────────────────────────────────
+
+    fn list_method(mut items: Vec<RuntimeValue>, name: &str, args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+        match name {
+            "append" | "add" | "push" => {
+                let item = args.first().cloned()
+                    .ok_or_else(|| RuntimeError::type_error("append() requires 1 argument"))?;
+                items.push(item);
+                Ok(RuntimeValue::List(items))
+            }
+            "pop" => {
+                if let Some(idx_val) = args.first() {
+                    let i = idx_val.as_int().ok_or_else(|| RuntimeError::type_error("pop() index must be an integer"))?;
+                    let real = if i < 0 { (items.len() as i64 + i) as usize } else { i as usize };
+                    if real >= items.len() { return Err(RuntimeError::index_out_of_bounds(i, items.len())); }
+                    Ok(items.remove(real))
+                } else {
+                    items.pop().ok_or_else(|| RuntimeError::type_error("pop() on empty list"))
+                }
+            }
+            "insert" => {
+                if args.len() < 2 { return Err(RuntimeError::type_error("insert(index, item) requires 2 arguments")); }
+                let idx = args[0].as_int().ok_or_else(|| RuntimeError::type_error("insert() index must be integer"))? as usize;
+                let item = args[1].clone();
+                let idx = idx.min(items.len());
+                items.insert(idx, item);
+                Ok(RuntimeValue::List(items))
+            }
+            "remove" => {
+                let item = args.first().ok_or_else(|| RuntimeError::type_error("remove() requires 1 argument"))?;
+                if let Some(pos) = items.iter().position(|x| x == item) {
+                    items.remove(pos);
+                    Ok(RuntimeValue::List(items))
+                } else {
+                    Err(RuntimeError::type_error(format!("'{}' not in list", item)))
+                }
+            }
+            "extend" => {
+                match args.first() {
+                    Some(RuntimeValue::List(other)) => { items.extend_from_slice(other); Ok(RuntimeValue::List(items)) }
+                    _ => Err(RuntimeError::type_error("extend() requires a list")),
+                }
+            }
+            "sort" => {
+                items.sort_by(|a, b| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal));
+                Ok(RuntimeValue::List(items))
+            }
+            "reverse" => { items.reverse(); Ok(RuntimeValue::List(items)) }
+            "clear" => Ok(RuntimeValue::List(Vec::new())),
+            "copy" => Ok(RuntimeValue::List(items)),
+            "index" | "indexOf" => {
+                let item = args.first().ok_or_else(|| RuntimeError::type_error("index() requires 1 argument"))?;
+                items.iter().position(|x| x == item)
+                    .map(|i| RuntimeValue::Int(i as i64))
+                    .ok_or_else(|| RuntimeError::type_error(format!("'{}' not in list", item)))
+            }
+            "count" => {
+                let item = args.first().ok_or_else(|| RuntimeError::type_error("count() requires 1 argument"))?;
+                Ok(RuntimeValue::Int(items.iter().filter(|x| *x == item).count() as i64))
+            }
+            "contains" | "includes" => {
+                let item = args.first().ok_or_else(|| RuntimeError::type_error("contains() requires 1 argument"))?;
+                Ok(RuntimeValue::Bool(items.contains(item)))
+            }
+            "len" | "length" | "size" => Ok(RuntimeValue::Int(items.len() as i64)),
+            "first" | "head" => items.first().cloned().ok_or_else(|| RuntimeError::type_error("list is empty")),
+            "last" => items.last().cloned().ok_or_else(|| RuntimeError::type_error("list is empty")),
+            "isEmpty" | "is_empty" => Ok(RuntimeValue::Bool(items.is_empty())),
+            "join" => {
+                let sep = args.first().and_then(|a| a.as_string()).unwrap_or("").to_string();
+                Ok(RuntimeValue::String(items.iter().map(|v| format!("{}", v)).collect::<Vec<_>>().join(&sep)))
+            }
+            "get" => {
+                let i = args.first().and_then(|a| a.as_int())
+                    .ok_or_else(|| RuntimeError::type_error("get() requires an integer index"))?;
+                let real = if i < 0 { (items.len() as i64 + i) as usize } else { i as usize };
+                items.get(real).cloned().ok_or_else(|| RuntimeError::index_out_of_bounds(i, items.len()))
+            }
+            _ => Err(RuntimeError::type_error(format!("'list' has no method '{}'", name))),
+        }
+    }
+
+    // ── Dict method dispatch ──────────────────────────────────
+
+    fn dict_method(mut pairs: Vec<(RuntimeValue, RuntimeValue)>, name: &str, args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+        match name {
+            "get" => {
+                let key = args.first().ok_or_else(|| RuntimeError::type_error("get() requires a key"))?;
+                let default = args.get(1).cloned().unwrap_or(RuntimeValue::Null);
+                Ok(pairs.iter().find(|(k, _)| k == key).map(|(_, v)| v.clone()).unwrap_or(default))
+            }
+            "put" | "set" => {
+                if args.len() < 2 { return Err(RuntimeError::type_error("put() requires key and value")); }
+                let (key, value) = (args[0].clone(), args[1].clone());
+                if let Some(p) = pairs.iter_mut().find(|(k, _)| k == &key) { p.1 = value; } else { pairs.push((key, value)); }
+                Ok(RuntimeValue::Dict(pairs))
+            }
+            "remove" | "delete" => {
+                let key = args.first().ok_or_else(|| RuntimeError::type_error("remove() requires a key"))?;
+                pairs.retain(|(k, _)| k != key);
+                Ok(RuntimeValue::Dict(pairs))
+            }
+            "keys" | "keySet" => Ok(RuntimeValue::List(pairs.into_iter().map(|(k, _)| k).collect())),
+            "values" => Ok(RuntimeValue::List(pairs.into_iter().map(|(_, v)| v).collect())),
+            "items" | "entries" | "entrySet" => Ok(RuntimeValue::List(
+                pairs.into_iter().map(|(k, v)| RuntimeValue::List(vec![k, v])).collect(),
+            )),
+            "contains" | "containsKey" | "has" => {
+                let key = args.first().ok_or_else(|| RuntimeError::type_error("containsKey() requires a key"))?;
+                Ok(RuntimeValue::Bool(pairs.iter().any(|(k, _)| k == key)))
+            }
+            "len" | "length" | "size" => Ok(RuntimeValue::Int(pairs.len() as i64)),
+            "isEmpty" | "is_empty" => Ok(RuntimeValue::Bool(pairs.is_empty())),
+            "clear" => Ok(RuntimeValue::Dict(Vec::new())),
+            _ => Err(RuntimeError::type_error(format!("'dict' has no method '{}'", name))),
+        }
     }
 
     /// Call a registered builtin function by name.

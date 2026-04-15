@@ -32,6 +32,8 @@ pub struct Lexer<'src> {
     diagnostics: DiagnosticBag,
     /// The kind of the last non-trivia token emitted (for ASI).
     prev_token: Option<TokenKind>,
+    /// Byte offset where the last emitted token ended (for gap measurement).
+    prev_token_end: u32,
     /// Whether we are at the very beginning of a line (for indentation).
     at_line_start: bool,
     /// Nesting depth of `( )` and `[ ]` — suppresses newline emission.
@@ -50,6 +52,7 @@ impl<'src> Lexer<'src> {
             indent: IndentTracker::new(),
             diagnostics: DiagnosticBag::new(),
             prev_token: None,
+            prev_token_end: 0,
             at_line_start: true,
             paren_depth: 0,
             done: false,
@@ -80,7 +83,7 @@ impl<'src> Lexer<'src> {
     pub fn next_token(&mut self) -> Token {
         // Drain queued tokens first (INDENT, DEDENT, NEWLINE).
         if let Some(tok) = self.queue.pop() {
-            self.prev_token = Some(tok.kind);
+            self.record_prev(&tok);
             return tok;
         }
 
@@ -116,7 +119,7 @@ impl<'src> Lexer<'src> {
                 if !self.queue.is_empty() {
                     self.queue.reverse();
                     if let Some(tok) = self.queue.pop() {
-                        self.prev_token = Some(tok.kind);
+                        self.record_prev(&tok);
                         return tok;
                     }
                 }
@@ -147,7 +150,7 @@ impl<'src> Lexer<'src> {
                         if prev.can_end_statement() {
                             let span = Span::new(start, self.scanner.pos() as u32);
                             let tok = Token::new(TokenKind::Newline, span);
-                            self.prev_token = Some(TokenKind::Newline);
+                            self.record_prev(&tok);
                             return tok;
                         }
                     }
@@ -175,18 +178,18 @@ impl<'src> Lexer<'src> {
                                 TokenKind::DoubleSlashEq,
                                 Span::new(start, self.scanner.pos() as u32),
                             );
-                            self.prev_token = Some(tok.kind);
+                            self.record_prev(&tok);
                             return tok;
                         }
                         // Disambiguation: if prev token can appear before //,
                         // treat as floor division. Otherwise, treat as comment.
-                        if self.is_floor_div_context() {
+                        if self.is_floor_div_context(start) {
                             self.scanner.advance_by(2);
                             let tok = Token::new(
                                 TokenKind::DoubleSlash,
                                 Span::new(start, self.scanner.pos() as u32),
                             );
-                            self.prev_token = Some(tok.kind);
+                            self.record_prev(&tok);
                             return tok;
                         }
                         // Line comment
@@ -217,7 +220,7 @@ impl<'src> Lexer<'src> {
             if ch.is_ascii_digit() {
                 let kind = numbers::scan_number(&mut self.scanner);
                 let tok = Token::new(kind, Span::new(start, self.scanner.pos() as u32));
-                self.prev_token = Some(tok.kind);
+                self.record_prev(&tok);
                 return tok;
             }
 
@@ -233,6 +236,11 @@ impl<'src> Lexer<'src> {
 
     // ── Helpers ──────────────────────────────────────────────
 
+    fn record_prev(&mut self, tok: &Token) {
+        self.prev_token = Some(tok.kind);
+        self.prev_token_end = tok.span.end;
+    }
+
     fn emit_eof(&mut self) -> Token {
         let pos = self.scanner.pos() as u32;
 
@@ -240,7 +248,8 @@ impl<'src> Lexer<'src> {
         if self.paren_depth == 0 {
             if let Some(prev) = self.prev_token {
                 if prev.can_end_statement() && prev != TokenKind::Newline {
-                    self.prev_token = Some(TokenKind::Newline);
+                    let nl = Token::new(TokenKind::Newline, Span::empty(pos));
+                    self.record_prev(&nl);
                     let eof_dedents = self.indent.flush_eof();
                     for _ in 0..eof_dedents {
                         self.queue
@@ -249,7 +258,7 @@ impl<'src> Lexer<'src> {
                     self.queue
                         .push(Token::new(TokenKind::Eof, Span::empty(pos)));
                     self.queue.reverse();
-                    return Token::new(TokenKind::Newline, Span::empty(pos));
+                    return nl;
                 }
             }
         }
@@ -265,7 +274,7 @@ impl<'src> Lexer<'src> {
                 .push(Token::new(TokenKind::Eof, Span::empty(pos)));
             self.queue.reverse();
             let tok = self.queue.pop().unwrap();
-            self.prev_token = Some(tok.kind);
+            self.record_prev(&tok);
             self.done = true;
             return tok;
         }
@@ -328,20 +337,28 @@ impl<'src> Lexer<'src> {
     }
 
     /// Determine if `//` should be floor division rather than a comment.
-    /// Floor division is used when the preceding token is an expression-ending token.
-    fn is_floor_div_context(&self) -> bool {
-        matches!(
+    ///
+    /// Floor division requires:
+    ///   1. preceding token is expression-ending, AND
+    ///   2. at most 1 character of whitespace between that token and `//`
+    ///      (covers `a//b` and `a // b` but NOT `x  // trailing comment`).
+    fn is_floor_div_context(&self, slash_start: u32) -> bool {
+        let is_expr_ending = matches!(
             self.prev_token,
             Some(
                 TokenKind::Identifier
                     | TokenKind::IntLiteral
                     | TokenKind::FloatLiteral
-                    | TokenKind::StringLiteral
                     | TokenKind::RParen
                     | TokenKind::RBracket
                     | TokenKind::RBrace
             )
-        )
+        );
+        if !is_expr_ending {
+            return false;
+        }
+        let gap = slash_start.saturating_sub(self.prev_token_end);
+        gap <= 1
     }
 
     fn scan_string_token(&mut self, start: u32, quote: char) -> Token {
@@ -350,7 +367,7 @@ impl<'src> Lexer<'src> {
         match result {
             StringScanResult::Complete(kind) => {
                 let tok = Token::new(kind, Span::new(start, self.scanner.pos() as u32));
-                self.prev_token = Some(tok.kind);
+                self.record_prev(&tok);
                 tok
             }
             StringScanResult::Unterminated => {
@@ -367,7 +384,7 @@ impl<'src> Lexer<'src> {
                     TokenKind::Error,
                     Span::new(start, self.scanner.pos() as u32),
                 );
-                self.prev_token = Some(tok.kind);
+                self.record_prev(&tok);
                 tok
             }
         }
@@ -388,7 +405,7 @@ impl<'src> Lexer<'src> {
         match result {
             StringScanResult::Complete(kind) => {
                 let tok = Token::new(kind, Span::new(start, self.scanner.pos() as u32));
-                self.prev_token = Some(tok.kind);
+                self.record_prev(&tok);
                 tok
             }
             StringScanResult::Unterminated => {
@@ -405,7 +422,7 @@ impl<'src> Lexer<'src> {
                     TokenKind::Error,
                     Span::new(start, self.scanner.pos() as u32),
                 );
-                self.prev_token = Some(tok.kind);
+                self.record_prev(&tok);
                 tok
             }
         }
@@ -416,7 +433,7 @@ impl<'src> Lexer<'src> {
         let text = self.scanner.slice_from(start as usize);
         let kind = keywords::lookup_keyword(text).unwrap_or(TokenKind::Identifier);
         let tok = Token::new(kind, Span::new(start, self.scanner.pos() as u32));
-        self.prev_token = Some(tok.kind);
+        self.record_prev(&tok);
         tok
     }
 
@@ -637,7 +654,7 @@ impl<'src> Lexer<'src> {
         };
 
         let tok = Token::new(kind, Span::new(start, self.scanner.pos() as u32));
-        self.prev_token = Some(tok.kind);
+        self.record_prev(&tok);
         tok
     }
 }

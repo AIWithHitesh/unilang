@@ -34,39 +34,51 @@ fn builtin_abs(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
 }
 
 fn builtin_min(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
-    if args.len() < 2 {
-        return Err(RuntimeError::type_error(
-            "min() requires at least 2 arguments",
-        ));
+    // min(list) or min(a, b, ...)
+    let items: Vec<&RuntimeValue> = if args.len() == 1 {
+        match &args[0] {
+            RuntimeValue::List(items) if !items.is_empty() => items.iter().collect(),
+            RuntimeValue::List(_) => return Err(RuntimeError::type_error("min() of empty list")),
+            other => return Err(RuntimeError::type_error(format!("min() argument must be a list or multiple values, got {}", other))),
+        }
+    } else if args.len() >= 2 {
+        args.iter().collect()
+    } else {
+        return Err(RuntimeError::type_error("min() requires at least 1 argument"));
+    };
+    let mut best = items[0];
+    for item in &items[1..] {
+        match best.partial_cmp(item) {
+            Some(std::cmp::Ordering::Greater) => best = item,
+            None => return Err(RuntimeError::type_error(format!("cannot compare {} and {}", best, item))),
+            _ => {}
+        }
     }
-    let a = &args[0];
-    let b = &args[1];
-    match a.partial_cmp(b) {
-        Some(std::cmp::Ordering::Less | std::cmp::Ordering::Equal) => Ok(a.clone()),
-        Some(std::cmp::Ordering::Greater) => Ok(b.clone()),
-        None => Err(RuntimeError::type_error(format!(
-            "cannot compare {} and {}",
-            a, b
-        ))),
-    }
+    Ok(best.clone())
 }
 
 fn builtin_max(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
-    if args.len() < 2 {
-        return Err(RuntimeError::type_error(
-            "max() requires at least 2 arguments",
-        ));
+    // max(list) or max(a, b, ...)
+    let items: Vec<&RuntimeValue> = if args.len() == 1 {
+        match &args[0] {
+            RuntimeValue::List(items) if !items.is_empty() => items.iter().collect(),
+            RuntimeValue::List(_) => return Err(RuntimeError::type_error("max() of empty list")),
+            other => return Err(RuntimeError::type_error(format!("max() argument must be a list or multiple values, got {}", other))),
+        }
+    } else if args.len() >= 2 {
+        args.iter().collect()
+    } else {
+        return Err(RuntimeError::type_error("max() requires at least 1 argument"));
+    };
+    let mut best = items[0];
+    for item in &items[1..] {
+        match best.partial_cmp(item) {
+            Some(std::cmp::Ordering::Less) => best = item,
+            None => return Err(RuntimeError::type_error(format!("cannot compare {} and {}", best, item))),
+            _ => {}
+        }
     }
-    let a = &args[0];
-    let b = &args[1];
-    match a.partial_cmp(b) {
-        Some(std::cmp::Ordering::Greater | std::cmp::Ordering::Equal) => Ok(a.clone()),
-        Some(std::cmp::Ordering::Less) => Ok(b.clone()),
-        None => Err(RuntimeError::type_error(format!(
-            "cannot compare {} and {}",
-            a, b
-        ))),
-    }
+    Ok(best.clone())
 }
 
 fn builtin_pow(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {

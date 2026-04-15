@@ -110,6 +110,22 @@ pub enum Opcode {
     /// Pop and print the top of the stack.
     Print,
 
+    // ── Method calls ─────────────────────────────────────
+    /// Call method `name` on receiver with N args.
+    /// Stack: [receiver, arg0, ..., argN-1] → [return_value]
+    CallMethod(String, usize),
+
+    // ── Membership test ──────────────────────────────────
+    /// `x in container`: stack [item, container] → Bool
+    Contains,
+
+    // ── Assertions & exceptions ──────────────────────────
+    /// `assert expr, msg`: stack [condition, msg] → () or RuntimeError
+    Assert,
+
+    /// `raise/throw expr`: stack [exception_value] → RuntimeError
+    Raise,
+
     // ── Halt ─────────────────────────────────────────────
     /// Stop execution.
     Halt,

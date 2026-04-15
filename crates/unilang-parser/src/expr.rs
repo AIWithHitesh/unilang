@@ -367,8 +367,13 @@ fn parse_primary(p: &mut Parser<'_>) -> Spanned<Expr> {
             let tok = p.advance();
             let span = tok.span;
             let raw = &p.source[span.start as usize..span.end as usize];
+            let is_fstring = raw.starts_with('f') || raw.starts_with('F');
             let value = strip_string_quotes(raw);
-            Spanned::new(Expr::StringLit(value), span)
+            if is_fstring {
+                parse_fstring_parts(&value, span)
+            } else {
+                Spanned::new(Expr::StringLit(value), span)
+            }
         }
         TokenKind::BoolTrue => {
             let tok = p.advance();
@@ -406,6 +411,81 @@ fn parse_int_literal(text: &str) -> i128 {
     } else {
         text.parse().unwrap_or(0)
     }
+}
+
+/// Expand f-string content like `Hello, {name}!` into a concatenation AST:
+///   "Hello, " + str(name) + "!"
+fn parse_fstring_parts(content: &str, span: Span) -> Spanned<Expr> {
+    let mut parts: Vec<Spanned<Expr>> = Vec::new();
+    let mut buf = String::new();
+    let chars: Vec<char> = content.chars().collect();
+    let mut i = 0;
+
+    while i < chars.len() {
+        if chars[i] == '{' {
+            if i + 1 < chars.len() && chars[i + 1] == '{' {
+                buf.push('{');
+                i += 2;
+                continue;
+            }
+            if !buf.is_empty() {
+                parts.push(Spanned::new(Expr::StringLit(buf.clone()), span));
+                buf.clear();
+            }
+            i += 1; // skip '{'
+            let mut expr_str = String::new();
+            let mut depth = 1u32;
+            while i < chars.len() && depth > 0 {
+                if chars[i] == '{' {
+                    depth += 1;
+                } else if chars[i] == '}' {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                expr_str.push(chars[i]);
+                i += 1;
+            }
+            i += 1; // skip closing '}'
+            let trimmed = expr_str.trim();
+            if !trimmed.is_empty() {
+                let ident_expr = Spanned::new(Expr::Ident(trimmed.to_string()), span);
+                let str_callee = Spanned::new(Expr::Ident("str".to_string()), span);
+                let call = Expr::Call(
+                    Box::new(str_callee),
+                    vec![Argument {
+                        name: None,
+                        value: ident_expr,
+                    }],
+                );
+                parts.push(Spanned::new(call, span));
+            }
+        } else if chars[i] == '}' && i + 1 < chars.len() && chars[i + 1] == '}' {
+            buf.push('}');
+            i += 2;
+        } else {
+            buf.push(chars[i]);
+            i += 1;
+        }
+    }
+
+    if !buf.is_empty() {
+        parts.push(Spanned::new(Expr::StringLit(buf), span));
+    }
+
+    if parts.is_empty() {
+        return Spanned::new(Expr::StringLit(String::new()), span);
+    }
+
+    let mut result = parts.remove(0);
+    for part in parts {
+        result = Spanned::new(
+            Expr::BinaryOp(Box::new(result), BinOp::Add, Box::new(part)),
+            span,
+        );
+    }
+    result
 }
 
 fn strip_string_quotes(raw: &str) -> String {
@@ -525,9 +605,13 @@ fn parse_list_literal(p: &mut Parser<'_>) -> Spanned<Expr> {
 fn parse_list_comp(p: &mut Parser<'_>, element: Spanned<Expr>, start: Span) -> Spanned<Expr> {
     let mut clauses = Vec::new();
     while p.eat(TokenKind::KwFor) {
-        let target = parse_expr(p, Prec::Comparison);
+        // Use Prec::BitOr so that `in` (Prec::Comparison) is NOT consumed as part of
+        // the target expression — it must remain as a separator keyword.
+        let target = parse_expr(p, Prec::BitOr);
         p.expect(TokenKind::KwIn);
-        let iter = parse_expr(p, Prec::Comparison);
+        // Parse iter up to `if`, `for`, or `]` — stop at Comparison level so
+        // chained comprehensions and conditionals work correctly.
+        let iter = parse_expr(p, Prec::BitOr);
         let mut conditions = Vec::new();
         while p.eat(TokenKind::KwIf) {
             let cond = parse_expr(p, Prec::Comparison);

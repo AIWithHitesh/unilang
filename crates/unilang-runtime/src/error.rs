@@ -14,6 +14,8 @@ pub enum ErrorKind {
     StackUnderflow,
     IndexOutOfBounds,
     AttributeError,
+    AssertionError,
+    Exception,
     /// Not a real error -- signals normal program termination via `Halt`.
     Halt,
 }
