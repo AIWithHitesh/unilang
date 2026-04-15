@@ -98,6 +98,139 @@ def parse_query(qs) {
     return result
 }
 
+// ─── Prediction Engine (from prediction_engine.uniL) ─────────────────────────
+// Implements extract_features(), generate_labels(), and confidence scoring.
+// Book model methods: get_late_return_rate() and get_popularity_score().
+// Tags: most_likely_booked | late_return | on_time_return | less_likely_booked
+
+def compute_book_features(book) {
+    // Late return rate — from Book.get_late_return_rate()
+    total_returns = book["lateReturns"] + book["onTimeReturns"]
+    late_rate = 0.0
+    if total_returns > 0 {
+        late_rate = book["lateReturns"] / total_returns
+    }
+
+    // Popularity score — from Book.get_popularity_score()
+    rating_w = book["averageRating"] * 0.3
+    checkout_norm = book["totalCheckouts"] / 100.0
+    if checkout_norm > 1.0 {
+        checkout_norm = 1.0
+    }
+    review_norm = book["totalRatings"] / 50.0
+    if review_norm > 1.0 {
+        review_norm = 1.0
+    }
+    popularity_score = rating_w + checkout_norm * 0.5 + review_norm * 0.2
+
+    // Derived features — from extract_features() in prediction_engine.uniL
+    book_age = 2026 - book["publishYear"]
+    checkouts_per_copy = book["totalCheckouts"] / book["totalCopies"]
+    ratings_per_checkout = 0.0
+    if book["totalCheckouts"] > 0 {
+        ratings_per_checkout = book["totalRatings"] / book["totalCheckouts"]
+    }
+
+    return {
+        "lateReturnRate": late_rate,
+        "popularityScore": popularity_score,
+        "bookAge": book_age,
+        "checkoutsPerCopy": checkouts_per_copy,
+        "ratingsPerCheckout": ratings_per_checkout
+    }
+}
+
+def predict_tag(book) {
+    // Rule-based labels adapted from prediction_engine.uniL generate_labels().
+    // Thresholds calibrated for this dataset (50 curated popular books).
+    total_returns = book["lateReturns"] + book["onTimeReturns"]
+    late_rate = 0.0
+    if total_returns > 0 {
+        late_rate = book["lateReturns"] / total_returns
+    }
+    checkouts = book["totalCheckouts"]
+    rating = book["averageRating"]
+
+    // Priority 1: high checkouts + high rating → most_likely_booked
+    if checkouts >= 150 {
+        if rating >= 4.7 {
+            return "most_likely_booked"
+        }
+    }
+    // Priority 2: elevated late-return rate → late_return
+    if late_rate > 0.09 {
+        if checkouts >= 60 {
+            return "late_return"
+        }
+    }
+    // Priority 3: consistently returned on time → on_time_return
+    if late_rate <= 0.05 {
+        if checkouts >= 60 {
+            return "on_time_return"
+        }
+    }
+    // Default
+    return "less_likely_booked"
+}
+
+def predict_confidence(book, tag) {
+    total_returns = book["lateReturns"] + book["onTimeReturns"]
+    late_rate = 0.0
+    if total_returns > 0 {
+        late_rate = book["lateReturns"] / total_returns
+    }
+
+    conf = 0.65
+    if tag == "most_likely_booked" {
+        c1 = book["totalCheckouts"] / 250.0
+        if c1 > 1.0 {
+            c1 = 1.0
+        }
+        c2 = 0.0
+        if book["averageRating"] > 4.7 {
+            c2 = (book["averageRating"] - 4.7) / 0.3
+        }
+        conf = 0.72 + c1 * 0.15 + c2 * 0.12
+        if conf > 0.99 {
+            conf = 0.99
+        }
+    }
+    if tag == "late_return" {
+        conf = 0.55 + late_rate * 2.5
+        if conf > 0.92 {
+            conf = 0.92
+        }
+    }
+    if tag == "on_time_return" {
+        diff = 0.05 - late_rate
+        conf = 0.62 + diff * 5.0
+        if conf > 0.88 {
+            conf = 0.88
+        }
+        if conf < 0.62 {
+            conf = 0.62
+        }
+    }
+    return conf
+}
+
+def apply_predictions() {
+    // Compute features + predict tags for all books at startup.
+    // This mirrors the PredictionEngine.predict_books() method.
+    for i in range(len(books)) {
+        feats = compute_book_features(books[i])
+        books[i]["lateReturnRate"] = feats["lateReturnRate"]
+        books[i]["popularityScore"] = feats["popularityScore"]
+        books[i]["bookAge"] = feats["bookAge"]
+        books[i]["checkoutsPerCopy"] = feats["checkoutsPerCopy"]
+        books[i]["ratingsPerCheckout"] = feats["ratingsPerCheckout"]
+        tag = predict_tag(books[i])
+        books[i]["predictionTag"] = tag
+        conf = predict_confidence(books[i], tag)
+        books[i]["predictionConfidence"] = conf
+    }
+}
+
 // ─── GET /api/health ─────────────────────────────────────────────────────────
 
 def handle_health() {
@@ -424,20 +557,24 @@ def handle_dashboard() {
         k = k + 1
     }
 
-    // Prediction tag distribution
-    tag_popular = 0
-    tag_high_demand = 0
-    tag_normal = 0
+    // Prediction tag distribution (tags set by prediction engine at startup)
+    tag_most_likely = 0
+    tag_late_return = 0
+    tag_on_time = 0
+    tag_less_likely = 0
     for book in books {
         t = book["predictionTag"]
-        if t == "popular" {
-            tag_popular = tag_popular + 1
+        if t == "most_likely_booked" {
+            tag_most_likely = tag_most_likely + 1
         }
-        if t == "high_demand" {
-            tag_high_demand = tag_high_demand + 1
+        if t == "late_return" {
+            tag_late_return = tag_late_return + 1
         }
-        if t == "normal" {
-            tag_normal = tag_normal + 1
+        if t == "on_time_return" {
+            tag_on_time = tag_on_time + 1
+        }
+        if t == "less_likely_booked" {
+            tag_less_likely = tag_less_likely + 1
         }
     }
 
@@ -537,9 +674,10 @@ def handle_dashboard() {
         "topCheckedOut": top_co,
         "topRated": top_rated,
         "predictionTagDistribution": {
-            "popular": tag_popular,
-            "high_demand": tag_high_demand,
-            "normal": tag_normal
+            "most_likely_booked": tag_most_likely,
+            "late_return": tag_late_return,
+            "on_time_return": tag_on_time,
+            "less_likely_booked": tag_less_likely
         },
         "lateReturnHotspots": late_spots,
         "categoryStats": cat_stats
@@ -551,28 +689,44 @@ def handle_dashboard() {
 
 def handle_prediction_stats() {
     total = len(books)
-    high_demand = 0
-    popular = 0
-    normal = 0
+    most_likely = 0
+    late_ret = 0
+    on_time = 0
+    less_likely = 0
+    total_conf = 0.0
     for book in books {
         t = book["predictionTag"]
-        if t == "high_demand" {
-            high_demand = high_demand + 1
+        if t == "most_likely_booked" {
+            most_likely = most_likely + 1
         }
-        if t == "popular" {
-            popular = popular + 1
+        if t == "late_return" {
+            late_ret = late_ret + 1
         }
-        if t == "normal" {
-            normal = normal + 1
+        if t == "on_time_return" {
+            on_time = on_time + 1
         }
+        if t == "less_likely_booked" {
+            less_likely = less_likely + 1
+        }
+        total_conf = total_conf + book["predictionConfidence"]
+    }
+    avg_conf = 0.0
+    if total > 0 {
+        avg_conf = total_conf / total
     }
     return json_resp({
         "totalBooks": total,
-        "highDemand": high_demand,
-        "popular": popular,
-        "normal": normal,
-        "modelAccuracy": 0.87,
-        "lastUpdated": "2026-01-15"
+        "tagDistribution": {
+            "most_likely_booked": most_likely,
+            "late_return": late_ret,
+            "on_time_return": on_time,
+            "less_likely_booked": less_likely
+        },
+        "averageConfidence": avg_conf,
+        "modelType": "rule_based",
+        "features": ["totalCheckouts", "averageRating", "lateReturnRate", "popularityScore", "checkoutsPerCopy", "ratingsPerCheckout", "bookAge"],
+        "labels": ["most_likely_booked", "late_return", "on_time_return", "less_likely_booked"],
+        "description": "Rule-based prediction engine from prediction_engine.uniL"
     }, 200)
 }
 
@@ -593,12 +747,62 @@ def handle_prediction_books(qs) {
                 "title": book["title"],
                 "author": book["author"],
                 "predictionTag": book["predictionTag"],
+                "predictionConfidence": book["predictionConfidence"],
                 "totalCheckouts": book["totalCheckouts"],
-                "averageRating": book["averageRating"]
+                "averageRating": book["averageRating"],
+                "lateReturnRate": book["lateReturnRate"],
+                "popularityScore": book["popularityScore"]
             })
         }
     }
     return json_resp({"books": result, "total": len(result)}, 200)
+}
+
+// ─── POST /api/books/:id/rate ─────────────────────────────────────────────────
+// From Review model in book.uniL: Book.addRating()
+
+def handle_rate_book(book_id, body_str) {
+    if body_str == "" {
+        return json_resp({"error": "Request body is empty"}, 400)
+    }
+    data = json_decode(body_str)
+    if data == None {
+        return json_resp({"error": "Invalid JSON"}, 400)
+    }
+    new_rating = data["rating"]
+    if new_rating < 1.0 {
+        return json_resp({"error": "Rating must be between 1 and 5"}, 400)
+    }
+    if new_rating > 5.0 {
+        return json_resp({"error": "Rating must be between 1 and 5"}, 400)
+    }
+    for i in range(len(books)) {
+        if books[i]["id"] == book_id {
+            // Rolling average update — from Book.addRating()
+            old_total = books[i]["averageRating"] * books[i]["totalRatings"]
+            books[i]["totalRatings"] = books[i]["totalRatings"] + 1
+            books[i]["averageRating"] = (old_total + new_rating) / books[i]["totalRatings"]
+            // Re-run prediction since rating affects popularity score and tag
+            feats = compute_book_features(books[i])
+            books[i]["lateReturnRate"] = feats["lateReturnRate"]
+            books[i]["popularityScore"] = feats["popularityScore"]
+            books[i]["checkoutsPerCopy"] = feats["checkoutsPerCopy"]
+            books[i]["ratingsPerCheckout"] = feats["ratingsPerCheckout"]
+            tag = predict_tag(books[i])
+            books[i]["predictionTag"] = tag
+            conf = predict_confidence(books[i], tag)
+            books[i]["predictionConfidence"] = conf
+            return json_resp({
+                "message": "Rating submitted",
+                "bookId": book_id,
+                "newAverageRating": books[i]["averageRating"],
+                "totalRatings": books[i]["totalRatings"],
+                "predictionTag": books[i]["predictionTag"],
+                "popularityScore": books[i]["popularityScore"]
+            }, 200)
+        }
+    }
+    return json_resp({"error": "Book not found"}, 404)
 }
 
 // ─── Static file server ───────────────────────────────────────────────────────
@@ -731,6 +935,11 @@ def router(req) {
                             return handle_return(book_id)
                         }
                     }
+                    if p4 == "rate" {
+                        if method == "POST" {
+                            return handle_rate_book(book_id, body)
+                        }
+                    }
                 }
             }
         }
@@ -747,9 +956,13 @@ def router(req) {
 
 // ─── Start ────────────────────────────────────────────────────────────────────
 
+// Apply prediction engine to all books at startup
+apply_predictions()
+
 print("=============================================================")
 print("  Library Management System — UniLang Edition")
 print("  Books in store: " + str(len(books)))
+print("  Prediction engine: applied (rule-based, prediction_engine.uniL)")
 print("  Frontend:  http://localhost:8080")
 print("  API base:  http://localhost:8080/api")
 print("=============================================================")
@@ -762,10 +975,11 @@ print("  GET  /api/books/:id")
 print("  POST /api/books")
 print("  PUT  /api/books/:id/checkout")
 print("  PUT  /api/books/:id/return")
+print("  POST /api/books/:id/rate")
 print("  GET  /api/categories")
 print("  GET  /api/languages")
 print("  GET  /api/predictions/stats")
-print("  GET  /api/predictions/books[?tag=popular]")
+print("  GET  /api/predictions/books[?tag=most_likely_booked|late_return|on_time_return|less_likely_booked]")
 print("")
 
 serve(8080, router)
