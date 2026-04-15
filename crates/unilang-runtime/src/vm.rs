@@ -1068,6 +1068,22 @@ impl VM {
             self.output.push(text);
             return Ok(RuntimeValue::Null);
         }
+
+        // Special handling for serve — needs mutable VM access for callbacks
+        if name == "serve" {
+            if args.len() < 2 {
+                return Err(RuntimeError::type_error("serve(port, handler) requires 2 arguments"));
+            }
+            let port = args[0]
+                .as_int()
+                .ok_or_else(|| RuntimeError::type_error("serve() port must be an integer"))? as u16;
+            let func_idx = match &args[1] {
+                RuntimeValue::Function(idx) => *idx,
+                _ => return Err(RuntimeError::type_error("serve() handler must be a function")),
+            };
+            return self.run_http_server(port, func_idx);
+        }
+
         if let Some(func) = self.builtins.get(name) {
             func(args)
         } else {
@@ -1076,6 +1092,185 @@ impl VM {
                 name
             )))
         }
+    }
+
+    // ── HTTP server support ───────────────────────────────────
+
+    /// Run an HTTP server on `port`, calling `func_idx` for every request.
+    fn run_http_server(&mut self, port: u16, func_idx: usize) -> Result<RuntimeValue, RuntimeError> {
+        use std::io::{Read, Write};
+        use std::net::TcpListener;
+
+        let addr = format!("0.0.0.0:{}", port);
+        let listener = TcpListener::bind(&addr).map_err(|e| {
+            RuntimeError::type_error(format!("serve(): cannot bind to {}: {}", addr, e))
+        })?;
+
+        println!("UniLang HTTP server listening on http://localhost:{}", port);
+        println!("Press Ctrl+C to stop.");
+
+        for stream in listener.incoming() {
+            match stream {
+                Ok(mut stream) => {
+                    let mut buf = [0u8; 8192];
+                    let n = stream.read(&mut buf).unwrap_or(0);
+                    let raw = std::str::from_utf8(&buf[..n]).unwrap_or("").to_string();
+                    let request = Self::parse_http_request(&raw);
+                    let response = match self.call_unilang_function(func_idx, vec![request]) {
+                        Ok(r) => r,
+                        Err(e) => {
+                            let body = format!("Internal Server Error: {}", e.message);
+                            let _ = stream.write_all(
+                                format!(
+                                    "HTTP/1.1 500 Internal Server Error\r\nContent-Type: text/plain\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+                                    body.len(), body
+                                )
+                                .as_bytes(),
+                            );
+                            continue;
+                        }
+                    };
+                    Self::write_http_response(&mut stream, response);
+                }
+                Err(_) => continue,
+            }
+        }
+
+        Ok(RuntimeValue::Null)
+    }
+
+    /// Invoke a UniLang function by index with the given arguments.
+    fn call_unilang_function(
+        &mut self,
+        func_idx: usize,
+        args: Vec<RuntimeValue>,
+    ) -> Result<RuntimeValue, RuntimeError> {
+        let func = self.functions[func_idx].clone();
+        let n_args = args.len();
+        let local_count = func.local_count.max(n_args);
+        let mut locals = vec![RuntimeValue::Null; local_count];
+        for (i, arg) in args.into_iter().enumerate() {
+            if i < local_count {
+                locals[i] = arg;
+            }
+        }
+
+        let target_depth = self.frames.len();
+        let frame = CallFrame {
+            code: func.code.clone(),
+            ip: 0,
+            locals,
+            stack_base: self.stack.len(),
+        };
+        self.frames.push(frame);
+
+        loop {
+            if self.frames.len() <= target_depth {
+                break;
+            }
+            match self.step() {
+                Ok(true) => continue,
+                Ok(false) => break,
+                Err(e) if e.kind == ErrorKind::Halt => break,
+                Err(e) => {
+                    while self.frames.len() > target_depth {
+                        self.frames.pop();
+                    }
+                    return Err(e);
+                }
+            }
+        }
+
+        Ok(self.stack.pop().unwrap_or(RuntimeValue::Null))
+    }
+
+    /// Parse a raw HTTP request string into a Dict.
+    fn parse_http_request(raw: &str) -> RuntimeValue {
+        let mut lines = raw.lines();
+        let (method, path) = if let Some(line) = lines.next() {
+            let parts: Vec<&str> = line.splitn(3, ' ').collect();
+            (
+                parts.first().copied().unwrap_or("GET").to_string(),
+                parts.get(1).copied().unwrap_or("/").to_string(),
+            )
+        } else {
+            ("GET".to_string(), "/".to_string())
+        };
+
+        // Strip query string from path for simplicity; expose full path.
+        let clean_path = path.splitn(2, '?').next().unwrap_or(&path).to_string();
+        let query = path.splitn(2, '?').nth(1).unwrap_or("").to_string();
+
+        let mut header_pairs = Vec::new();
+        let mut body = String::new();
+        let mut in_body = false;
+        for line in lines {
+            if in_body {
+                if !body.is_empty() { body.push('\n'); }
+                body.push_str(line);
+            } else if line.is_empty() {
+                in_body = true;
+            } else if let Some(colon) = line.find(':') {
+                let key = line[..colon].trim().to_lowercase();
+                let val = line[colon + 1..].trim().to_string();
+                header_pairs.push((
+                    RuntimeValue::String(key),
+                    RuntimeValue::String(val),
+                ));
+            }
+        }
+
+        RuntimeValue::Dict(vec![
+            (RuntimeValue::String("method".to_string()), RuntimeValue::String(method)),
+            (RuntimeValue::String("path".to_string()), RuntimeValue::String(clean_path)),
+            (RuntimeValue::String("query".to_string()), RuntimeValue::String(query)),
+            (RuntimeValue::String("headers".to_string()), RuntimeValue::Dict(header_pairs)),
+            (RuntimeValue::String("body".to_string()), RuntimeValue::String(body.trim().to_string())),
+        ])
+    }
+
+    /// Write a RuntimeValue (String or Dict) as an HTTP/1.1 response.
+    fn write_http_response<W: std::io::Write>(stream: &mut W, response: RuntimeValue) {
+        let (status, body, content_type) = match response {
+            RuntimeValue::Dict(ref pairs) => {
+                let status = pairs
+                    .iter()
+                    .find(|(k, _)| k == &RuntimeValue::String("status".to_string()))
+                    .map(|(_, v)| match v {
+                        RuntimeValue::Int(n) => *n as u16,
+                        _ => 200,
+                    })
+                    .unwrap_or(200);
+                let body = pairs
+                    .iter()
+                    .find(|(k, _)| k == &RuntimeValue::String("body".to_string()))
+                    .map(|(_, v)| format!("{}", v))
+                    .unwrap_or_default();
+                let ct = pairs
+                    .iter()
+                    .find(|(k, _)| k == &RuntimeValue::String("content_type".to_string()))
+                    .map(|(_, v)| format!("{}", v))
+                    .unwrap_or_else(|| "application/json".to_string());
+                (status, body, ct)
+            }
+            RuntimeValue::String(s) => (200, s, "text/plain".to_string()),
+            other => (200, format!("{}", other), "text/plain".to_string()),
+        };
+
+        let status_text = match status {
+            200 => "OK",
+            201 => "Created",
+            400 => "Bad Request",
+            404 => "Not Found",
+            500 => "Internal Server Error",
+            _ => "OK",
+        };
+
+        let response_str = format!(
+            "HTTP/1.1 {} {}\r\nContent-Type: {}\r\nContent-Length: {}\r\nAccess-Control-Allow-Origin: *\r\nConnection: close\r\n\r\n{}",
+            status, status_text, content_type, body.len(), body
+        );
+        let _ = stream.write_all(response_str.as_bytes());
     }
 
     /// Helper for numeric binary operations.

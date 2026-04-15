@@ -69,6 +69,9 @@ pub fn register_all(vm: &mut VM) {
     vm.set_global("None", RuntimeValue::Null);
     vm.set_global("True", RuntimeValue::Bool(true));
     vm.set_global("False", RuntimeValue::Bool(false));
+
+    // HTTP server — handled specially in VM::call_builtin (needs &mut self)
+    vm.set_global("serve", RuntimeValue::NativeFunction("serve".to_string()));
 }
 
 fn builtin_print(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {

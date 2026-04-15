@@ -282,9 +282,14 @@ impl Compiler {
         // Emit instruction to make the function available at runtime.
         self.emit(Opcode::MakeFunction(fn_index));
 
-        // Store as a local (or global at module level).
-        let slot = self.define_local(&decl.name.node);
-        self.emit(Opcode::StoreLocal(slot));
+        // At module level, store as a global so functions can call each other by name.
+        // Inside a function, store as a local (nested function).
+        if !prev_in_function {
+            self.emit(Opcode::StoreGlobal(decl.name.node.clone()));
+        } else {
+            let slot = self.define_local(&decl.name.node);
+            self.emit(Opcode::StoreLocal(slot));
+        }
     }
 
     fn compile_class_decl(&mut self, decl: &ClassDecl) {
@@ -816,9 +821,22 @@ impl Compiler {
 
             // Assignment
             Expr::Assign(target, value) => {
-                self.compile_expr(&value.node);
-                self.emit(Opcode::Dup);
-                self.compile_assign_target(&target.node);
+                if let Expr::Index(obj, index) = &target.node {
+                    // Index assignment: a[i] = v
+                    // SetIndex expects stack: [collection, index, value] (bottom to top)
+                    self.compile_expr(&obj.node);     // push collection
+                    self.compile_expr(&index.node);   // push index
+                    self.compile_expr(&value.node);   // push value
+                    self.emit(Opcode::SetIndex);       // pops value, index, collection; pushes modified collection
+                    // Store the modified collection back to its source variable.
+                    self.store_back_to_source(&obj.node);
+                    // Push Null as the expression result (assignment-as-expression for indexes returns null).
+                    self.emit(Opcode::LoadConst(Value::Null));
+                } else {
+                    self.compile_expr(&value.node);
+                    self.emit(Opcode::Dup);
+                    self.compile_assign_target(&target.node);
+                }
             }
 
             // Cast — just compile the expression (ignore the type at bytecode level).
@@ -1002,6 +1020,39 @@ impl Compiler {
         }
         self.compile_expr(callee);
         self.emit(Opcode::Call(args.len()));
+    }
+
+    /// Emit instructions to store the top-of-stack value back into `obj`.
+    /// Used after `SetIndex` to persist the modified collection.
+    fn store_back_to_source(&mut self, obj: &Expr) {
+        match obj {
+            Expr::Ident(name) => {
+                if let Some(slot) = self.resolve_local(name) {
+                    self.emit(Opcode::StoreLocal(slot));
+                } else {
+                    self.emit(Opcode::StoreGlobal(name.clone()));
+                }
+            }
+            Expr::Index(parent, index) => {
+                // Nested index: e.g. a[i]["key"] = v.
+                // After inner SetIndex, the modified inner collection is on stack.
+                // We need to store it back at a[i], then recurse.
+                // Use a temp slot to avoid stack ordering issues.
+                let temp_slot = self.define_local("__nested_tmp__");
+                self.emit(Opcode::StoreLocal(temp_slot)); // save modified inner value
+                // Compile outer assignment: parent[index] = modified_value
+                self.compile_expr(&parent.node);        // push parent collection
+                self.compile_expr(&index.node);          // push index
+                self.emit(Opcode::LoadLocal(temp_slot)); // push saved modified value
+                self.emit(Opcode::SetIndex);              // pops value, index, parent; pushes modified parent
+                // Recursively store back to parent's source
+                self.store_back_to_source(&parent.node);
+            }
+            _ => {
+                // Other complex lhs: pop the result to avoid stack leak
+                self.emit(Opcode::Pop);
+            }
+        }
     }
 
     /// Emit store instructions for an assignment target.

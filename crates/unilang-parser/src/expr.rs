@@ -636,6 +636,7 @@ fn parse_list_comp(p: &mut Parser<'_>, element: Spanned<Expr>, start: Span) -> S
 fn parse_dict_or_set_literal(p: &mut Parser<'_>) -> Spanned<Expr> {
     let start = p.advance().span; // {
 
+    p.skip_terminators(); // allow `{\n` opening
     if p.at(TokenKind::RBrace) {
         let end = p.advance().span;
         return Spanned::new(Expr::Dict(Vec::new()), start.merge(end));
@@ -648,7 +649,11 @@ fn parse_dict_or_set_literal(p: &mut Parser<'_>) -> Spanned<Expr> {
         p.advance();
         let val = parse_expr(p, Prec::None);
         let mut pairs = vec![(first, val)];
-        while p.eat(TokenKind::Comma) {
+        loop {
+            p.skip_terminators(); // skip newline after value (before comma or })
+            if !p.eat(TokenKind::Comma) {
+                break;
+            }
             p.skip_terminators();
             if p.at(TokenKind::RBrace) {
                 break;
@@ -658,19 +663,25 @@ fn parse_dict_or_set_literal(p: &mut Parser<'_>) -> Spanned<Expr> {
             let v = parse_expr(p, Prec::None);
             pairs.push((k, v));
         }
+        p.skip_terminators();
         let end = p.expect(TokenKind::RBrace);
         return Spanned::new(Expr::Dict(pairs), start.merge(end));
     }
 
     // Set: {a, b, ...}
     let mut elements = vec![first];
-    while p.eat(TokenKind::Comma) {
+    loop {
+        p.skip_terminators();
+        if !p.eat(TokenKind::Comma) {
+            break;
+        }
         p.skip_terminators();
         if p.at(TokenKind::RBrace) {
             break;
         }
         elements.push(parse_expr(p, Prec::None));
     }
+    p.skip_terminators();
     let end = p.expect(TokenKind::RBrace);
     Spanned::new(Expr::Set(elements), start.merge(end))
 }

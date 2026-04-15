@@ -1,223 +1,150 @@
-// library_service.uniL — Core library business logic
-// Java-style service class with Python data manipulation
+// library_service.uniL — Library business logic
+// Run standalone: unilang run library_service.uniL
 
-import java.util.concurrent.ConcurrentHashMap
-import java.util.Collections
-import json
+// ─── Data ───────────────────────────────────────────────────
 
-// ─── Library Service ───────────────────────────────────────
+books = [
+    {"id": "1", "title": "The Great Gatsby", "author": "F. Scott Fitzgerald",
+     "category": "Fiction", "status": "available", "rating": 4.2, "checkouts": 150},
+    {"id": "2", "title": "Clean Code", "author": "Robert C. Martin",
+     "category": "Technology", "status": "checked_out", "rating": 4.8, "checkouts": 320},
+    {"id": "3", "title": "The Pragmatic Programmer", "author": "David Thomas",
+     "category": "Technology", "status": "available", "rating": 4.7, "checkouts": 280},
+    {"id": "4", "title": "To Kill a Mockingbird", "author": "Harper Lee",
+     "category": "Fiction", "status": "available", "rating": 4.9, "checkouts": 210},
+    {"id": "5", "title": "Design Patterns", "author": "Gang of Four",
+     "category": "Technology", "status": "available", "rating": 4.5, "checkouts": 195},
+    {"id": "6", "title": "Dune", "author": "Frank Herbert",
+     "category": "Science Fiction", "status": "checked_out", "rating": 4.6, "checkouts": 175},
+    {"id": "7", "title": "1984", "author": "George Orwell",
+     "category": "Fiction", "status": "available", "rating": 4.7, "checkouts": 300},
+    {"id": "8", "title": "The Hobbit", "author": "J.R.R. Tolkien",
+     "category": "Fantasy", "status": "available", "rating": 4.8, "checkouts": 260}
+]
 
-public class LibraryService {
-    private ConcurrentHashMap<String, Object> booksMap
-    private ConcurrentHashMap<String, Object> reviewsMap
-    private ConcurrentHashMap<String, Object> usersMap
-    private ConcurrentHashMap<String, Object> ticketsMap
-    private list booksList
-    private list reviewsList
-    private boolean dataLoaded
+// ─── Service functions ──────────────────────────────────────
 
-    public LibraryService() {
-        this.booksMap = new ConcurrentHashMap<>()
-        this.reviewsMap = new ConcurrentHashMap<>()
-        this.usersMap = new ConcurrentHashMap<>()
-        this.ticketsMap = new ConcurrentHashMap<>()
-        this.booksList = []
-        this.reviewsList = []
-        this.dataLoaded = false
+def get_all_books() {
+    return books
+}
+
+def find_book(book_id) {
+    for book in books {
+        if book["id"] == book_id {
+            return book
+        }
     }
+    return None
+}
 
-    def load_data(self, data_dir: str = "backend/data"):
-        """Load generated JSON data into memory."""
-        with open(f"{data_dir}/books.json", "r") as f:
-            self.booksList = json.load(f)
-        with open(f"{data_dir}/reviews.json", "r") as f:
-            self.reviewsList = json.load(f)
-        with open(f"{data_dir}/users.json", "r") as f:
-            users = json.load(f)
-
-        // Index by ID for O(1) lookup
-        for book in self.booksList:
-            self.booksMap.put(book["id"], book)
-        for review in self.reviewsList:
-            self.reviewsMap.put(review["id"], review)
-        for user in users:
-            self.usersMap.put(user["id"], user)
-
-        self.dataLoaded = true
-        print(f"Loaded {len(self.booksList)} books, {len(self.reviewsList)} reviews, {len(users)} users")
-
-    // ── Book Queries ───────────────────────────────────────
-
-    def get_all_books(self, page: int = 1, page_size: int = 50) -> dict:
-        """Paginated book listing."""
-        start = (page - 1) * page_size
-        end = start + page_size
-        books = self.booksList[start:end]
-        return {
-            "books": books,
-            "total": len(self.booksList),
-            "page": page,
-            "pageSize": page_size,
-            "totalPages": (len(self.booksList) + page_size - 1) // page_size
+def search_books(query) {
+    query_lower = query.lower()
+    results = []
+    for book in books {
+        if book["title"].lower().contains(query_lower) or book["author"].lower().contains(query_lower) {
+            results.append(book)
         }
+    }
+    return results
+}
 
-    def search_books(self, query: str, page: int = 1, page_size: int = 50) -> dict:
-        """Search books by title, author, or ISBN."""
-        query_lower = query.lower()
-        results = [
-            book for book in self.booksList
-            if query_lower in book["title"].lower()
-            or query_lower in book["author"].lower()
-            or query_lower in book.get("isbn", "").lower()
-        ]
-        start = (page - 1) * page_size
-        end = start + page_size
-        return {
-            "books": results[start:end],
-            "total": len(results),
-            "page": page,
-            "pageSize": page_size,
-            "totalPages": (len(results) + page_size - 1) // page_size,
-            "query": query
+def get_stats() {
+    total = len(books)
+    available = 0
+    checked_out = 0
+    total_rating = 0.0
+    total_checkouts = 0
+    for book in books {
+        if book["status"] == "available" {
+            available = available + 1
         }
-
-    def filter_books(self, category: str = None, status: str = None,
-                     prediction_tag: str = None, min_rating: float = 0,
-                     language: str = None, sort_by: str = "title",
-                     sort_order: str = "asc",
-                     page: int = 1, page_size: int = 50) -> dict:
-        """Filter books by multiple criteria."""
-        results = self.booksList
-
-        if category:
-            results = [b for b in results if b["category"] == category]
-        if status:
-            results = [b for b in results if b["status"] == status]
-        if prediction_tag:
-            results = [b for b in results if b.get("predictionTag") == prediction_tag]
-        if min_rating > 0:
-            results = [b for b in results if b["averageRating"] >= min_rating]
-        if language:
-            results = [b for b in results if b["language"] == language]
-
-        // Sorting
-        reverse = sort_order == "desc"
-        if sort_by == "rating":
-            results = sorted(results, key=lambda b: b["averageRating"], reverse=reverse)
-        elif sort_by == "checkouts":
-            results = sorted(results, key=lambda b: b["totalCheckouts"], reverse=reverse)
-        elif sort_by == "year":
-            results = sorted(results, key=lambda b: b["publishYear"], reverse=reverse)
-        elif sort_by == "lateRate":
-            results = sorted(results, key=lambda b: b.get("lateReturnRate", 0), reverse=reverse)
-        else:
-            results = sorted(results, key=lambda b: b["title"].lower(), reverse=reverse)
-
-        start = (page - 1) * page_size
-        end = start + page_size
-        return {
-            "books": results[start:end],
-            "total": len(results),
-            "page": page,
-            "pageSize": page_size,
-            "totalPages": (len(results) + page_size - 1) // page_size,
-            "filters": {
-                "category": category,
-                "status": status,
-                "predictionTag": prediction_tag,
-                "minRating": min_rating,
-                "language": language
-            }
+        if book["status"] == "checked_out" {
+            checked_out = checked_out + 1
         }
+        total_rating = total_rating + book["rating"]
+        total_checkouts = total_checkouts + book["checkouts"]
+    }
+    avg_rating = total_rating / total
+    return {
+        "total": total,
+        "available": available,
+        "checked_out": checked_out,
+        "avg_rating": avg_rating,
+        "total_checkouts": total_checkouts
+    }
+}
 
-    def get_book_by_id(self, book_id: str) -> dict:
-        """Get a single book with its reviews."""
-        book = self.booksMap.get(book_id)
-        if not book:
-            return None
-        reviews = [r for r in self.reviewsList if r["bookId"] == book_id]
-        return {
-            "book": book,
-            "reviews": reviews
+def get_top_books(n) {
+    sorted_books = []
+    for book in books {
+        sorted_books.append(book)
+    }
+    // Simple insertion sort by checkouts (descending)
+    for i in range(1, len(sorted_books)) {
+        key = sorted_books[i]
+        j = i - 1
+        while j >= 0 and sorted_books[j]["checkouts"] < key["checkouts"] {
+            sorted_books[j + 1] = sorted_books[j]
+            j = j - 1
         }
-
-    // ── Dashboard Analytics ────────────────────────────────
-
-    def get_dashboard_stats(self) -> dict:
-        """Compute summary statistics for the dashboard."""
-        import numpy as np
-
-        total_books = len(self.booksList)
-        available = len([b for b in self.booksList if b["status"] == "available"])
-        checked_out = len([b for b in self.booksList if b["status"] == "checked_out"])
-
-        ratings = [b["averageRating"] for b in self.booksList if b["averageRating"] > 0]
-        checkouts = [b["totalCheckouts"] for b in self.booksList]
-
-        // Category breakdown
-        category_stats = {}
-        for book in self.booksList:
-            cat = book["category"]
-            if cat not in category_stats:
-                category_stats[cat] = {"count": 0, "totalCheckouts": 0, "totalRatings": 0}
-            category_stats[cat]["count"] += 1
-            category_stats[cat]["totalCheckouts"] += book["totalCheckouts"]
-            category_stats[cat]["totalRatings"] += book["totalRatings"]
-
-        // Prediction tag distribution
-        tag_stats = {}
-        for book in self.booksList:
-            tag = book.get("predictionTag", "untagged")
-            tag_stats[tag] = tag_stats.get(tag, 0) + 1
-
-        // Top 10 most checked out
-        top_books = sorted(self.booksList, key=lambda b: -b["totalCheckouts"])[:10]
-
-        // Top 10 highest rated (with min 3 reviews)
-        rated_books = [b for b in self.booksList if b["totalRatings"] >= 3]
-        top_rated = sorted(rated_books, key=lambda b: -b["averageRating"])[:10]
-
-        // Late return hotspots
-        late_books = sorted(
-            [b for b in self.booksList if b["totalCheckouts"] > 5],
-            key=lambda b: -b.get("lateReturnRate", 0)
-        )[:10]
-
-        return {
-            "overview": {
-                "totalBooks": total_books,
-                "availableBooks": available,
-                "checkedOutBooks": checked_out,
-                "totalReviews": len(self.reviewsList),
-                "averageRating": round(np.mean(ratings), 2) if ratings else 0,
-                "totalCheckouts": sum(checkouts),
-                "avgCheckoutsPerBook": round(np.mean(checkouts), 1)
-            },
-            "categoryStats": category_stats,
-            "predictionTagDistribution": tag_stats,
-            "topCheckedOut": [{"title": b["title"], "author": b["author"],
-                              "checkouts": b["totalCheckouts"], "category": b["category"]}
-                             for b in top_books],
-            "topRated": [{"title": b["title"], "author": b["author"],
-                         "rating": b["averageRating"], "reviews": b["totalRatings"]}
-                        for b in top_rated],
-            "lateReturnHotspots": [{"title": b["title"], "lateRate": b.get("lateReturnRate", 0),
-                                   "checkouts": b["totalCheckouts"],
-                                   "predictionTag": b.get("predictionTag")}
-                                  for b in late_books]
+        sorted_books[j + 1] = key
+    }
+    result = []
+    count = 0
+    for book in sorted_books {
+        if count < n {
+            result.append(book)
+            count = count + 1
         }
+    }
+    return result
+}
 
-    def get_categories(self) -> list:
-        """Return unique categories."""
-        return sorted(list(set(b["category"] for b in self.booksList)))
+def get_by_category(category) {
+    results = []
+    for book in books {
+        if book["category"] == category {
+            results.append(book)
+        }
+    }
+    return results
+}
 
-    def get_languages(self) -> list:
-        """Return unique languages."""
-        return sorted(list(set(b["language"] for b in self.booksList)))
+// ─── Demo ───────────────────────────────────────────────────
 
-    def update_books_with_predictions(self, predicted_books: list):
-        """Update in-memory book data with ML predictions."""
-        for book in predicted_books:
-            self.booksMap.put(book["id"], book)
-        self.booksList = predicted_books
-        print(f"Updated {len(predicted_books)} books with prediction tags.")
+print("=== Library Service Demo ===")
+print("")
+
+stats = get_stats()
+print("Library Stats:")
+print("  Total books:    " + str(stats["total"]))
+print("  Available:      " + str(stats["available"]))
+print("  Checked out:    " + str(stats["checked_out"]))
+print("  Avg rating:     " + str(stats["avg_rating"]))
+print("  Total checkouts:" + str(stats["total_checkouts"]))
+print("")
+
+print("Top 3 Most Checked Out:")
+top = get_top_books(3)
+for book in top {
+    print("  " + book["title"] + " by " + book["author"] + " (" + str(book["checkouts"]) + " checkouts)")
+}
+print("")
+
+print("Technology books:")
+tech = get_by_category("Technology")
+for book in tech {
+    print("  [" + book["status"] + "] " + book["title"])
+}
+print("")
+
+print("Search results for 'code':")
+results = search_books("code")
+for book in results {
+    print("  " + book["title"] + " — " + book["author"])
+}
+print("")
+
+print("Book lookup (id=3):")
+book = find_book("3")
+print("  Found: " + book["title"] + " (rating: " + str(book["rating"]) + ")")

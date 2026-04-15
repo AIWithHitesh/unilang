@@ -99,7 +99,16 @@ impl<'src> Lexer<'src> {
                 self.at_line_start = false;
                 let indent_level = self.measure_indent();
 
-                let change = self.indent.process_line_indent(indent_level);
+                // Only emit INDENT/DEDENT when outside ( ) [ ] — inside brackets,
+                // indentation is meaningless (multi-line expressions are allowed).
+                let change = if self.paren_depth == 0 {
+                    self.indent.process_line_indent(indent_level)
+                } else {
+                    // Still advance the indent tracker's state so it doesn't get confused
+                    // when we exit the bracket, but don't emit any tokens.
+                    let _ = self.indent.process_line_indent(indent_level);
+                    IndentChange::None
+                };
                 let span = Span::new(pos, self.scanner.pos() as u32);
 
                 match change {

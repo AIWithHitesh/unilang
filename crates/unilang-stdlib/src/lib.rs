@@ -6,6 +6,7 @@
 
 pub mod builtins;
 pub mod collections;
+pub mod json;
 pub mod math;
 pub mod strings;
 
@@ -14,6 +15,7 @@ use unilang_runtime::vm::VM;
 /// Register all built-in functions and values in the VM.
 pub fn register_builtins(vm: &mut VM) {
     builtins::register_all(vm);
+    json::register_all(vm);
     math::register_all(vm);
     collections::register_all(vm);
     strings::register_all(vm);

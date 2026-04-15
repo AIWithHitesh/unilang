@@ -1,213 +1,222 @@
-// server.uniL — REST API Server
-// Flask backend with Java-style dependency injection pattern
+// server.uniL — Library Management REST API
+// Pure UniLang HTTP server — run with: unilang run server.uniL
 
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import json
-import sys
-import os
+// ─── In-memory book store ───────────────────────────────────
 
-// Add project root to path
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+books = [
+    {"id": "1", "title": "The Great Gatsby", "author": "F. Scott Fitzgerald",
+     "category": "Fiction", "status": "available", "rating": 4.2, "year": 1925},
+    {"id": "2", "title": "Clean Code", "author": "Robert C. Martin",
+     "category": "Technology", "status": "checked_out", "rating": 4.8, "year": 2008},
+    {"id": "3", "title": "The Pragmatic Programmer", "author": "David Thomas",
+     "category": "Technology", "status": "available", "rating": 4.7, "year": 1999},
+    {"id": "4", "title": "To Kill a Mockingbird", "author": "Harper Lee",
+     "category": "Fiction", "status": "available", "rating": 4.9, "year": 1960},
+    {"id": "5", "title": "Design Patterns", "author": "Gang of Four",
+     "category": "Technology", "status": "available", "rating": 4.5, "year": 1994},
+    {"id": "6", "title": "Dune", "author": "Frank Herbert",
+     "category": "Science Fiction", "status": "checked_out", "rating": 4.6, "year": 1965},
+    {"id": "7", "title": "1984", "author": "George Orwell",
+     "category": "Fiction", "status": "available", "rating": 4.7, "year": 1949},
+    {"id": "8", "title": "The Hobbit", "author": "J.R.R. Tolkien",
+     "category": "Fantasy", "status": "available", "rating": 4.8, "year": 1937}
+]
 
-from services.library_service import LibraryService
-from ml.prediction_engine import PredictionEngine
-from data.generate_data import generate_all_data, save_data
+// ─── Helper: JSON response builder ─────────────────────────
 
-// ─── Application Bootstrap ─────────────────────────────────
-
-public class LibraryServer {
-    private Flask app
-    private LibraryService libraryService
-    private PredictionEngine predictionEngine
-    private int port
-    private boolean mlReady
-
-    public LibraryServer(int port = 8080) {
-        this.port = port
-        this.app = Flask(__name__)
-        CORS(this.app)
-        this.libraryService = LibraryService()
-        this.predictionEngine = PredictionEngine()
-        this.mlReady = false
-        self._register_routes()
-    }
-
-    def _register_routes(self):
-        """Register all API endpoints."""
-        app = self.app
-
-        // ── Health & Info ──────────────────────────────────
-
-        @app.route("/api/health", methods=["GET"])
-        def health():
-            return jsonify({
-                "status": "healthy",
-                "dataLoaded": self.libraryService.dataLoaded,
-                "mlReady": self.mlReady,
-                "modelInfo": self.predictionEngine.get_model_info() if self.mlReady else None
-            })
-
-        // ── Data Generation ────────────────────────────────
-
-        @app.route("/api/admin/generate-data", methods=["POST"])
-        def generate_data():
-            """Generate fresh 10K book dataset."""
-            try:
-                data = generate_all_data()
-                save_data(data)
-                self.libraryService.load_data()
-                return jsonify({"status": "success", "metadata": data["metadata"]})
-            except Exception as e:
-                return jsonify({"status": "error", "message": str(e)}), 500
-
-        // ── ML Training ────────────────────────────────────
-
-        @app.route("/api/admin/train-model", methods=["POST"])
-        def train_model():
-            """Train the prediction engine on current book data."""
-            try:
-                if not self.libraryService.dataLoaded:
-                    return jsonify({"error": "Data not loaded. Generate data first."}), 400
-
-                metrics = self.predictionEngine.train(self.libraryService.booksList)
-                predicted_books = self.predictionEngine.predict_books(self.libraryService.booksList)
-                self.libraryService.update_books_with_predictions(predicted_books)
-                self.predictionEngine.save_model()
-                self.mlReady = true
-
-                return jsonify({"status": "success", "metrics": metrics})
-            except Exception as e:
-                return jsonify({"status": "error", "message": str(e)}), 500
-
-        // ── Dashboard ──────────────────────────────────────
-
-        @app.route("/api/dashboard", methods=["GET"])
-        def dashboard():
-            """Get dashboard statistics."""
-            if not self.libraryService.dataLoaded:
-                return jsonify({"error": "Data not loaded"}), 400
-            stats = self.libraryService.get_dashboard_stats()
-            return jsonify(stats)
-
-        // ── Books CRUD ─────────────────────────────────────
-
-        @app.route("/api/books", methods=["GET"])
-        def get_books():
-            """List books with pagination, search, and filters."""
-            page = request.args.get("page", 1, type=int)
-            page_size = request.args.get("pageSize", 50, type=int)
-            query = request.args.get("q", None)
-            category = request.args.get("category", None)
-            status = request.args.get("status", None)
-            prediction_tag = request.args.get("predictionTag", None)
-            min_rating = request.args.get("minRating", 0, type=float)
-            language = request.args.get("language", None)
-            sort_by = request.args.get("sortBy", "title")
-            sort_order = request.args.get("sortOrder", "asc")
-
-            if query:
-                result = self.libraryService.search_books(query, page, page_size)
-            else:
-                result = self.libraryService.filter_books(
-                    category=category, status=status,
-                    prediction_tag=prediction_tag, min_rating=min_rating,
-                    language=language, sort_by=sort_by, sort_order=sort_order,
-                    page=page, page_size=page_size
-                )
-            return jsonify(result)
-
-        @app.route("/api/books/<book_id>", methods=["GET"])
-        def get_book(book_id):
-            """Get a single book with reviews."""
-            result = self.libraryService.get_book_by_id(book_id)
-            if not result:
-                return jsonify({"error": "Book not found"}), 404
-            return jsonify(result)
-
-        // ── Metadata ───────────────────────────────────────
-
-        @app.route("/api/categories", methods=["GET"])
-        def get_categories():
-            return jsonify(self.libraryService.get_categories())
-
-        @app.route("/api/languages", methods=["GET"])
-        def get_languages():
-            return jsonify(self.libraryService.get_languages())
-
-        // ── Prediction Tag Stats ───────────────────────────
-
-        @app.route("/api/predictions/stats", methods=["GET"])
-        def prediction_stats():
-            """Get prediction tag distribution and model info."""
-            if not self.mlReady:
-                return jsonify({"error": "Model not trained"}), 400
-            stats = self.libraryService.get_dashboard_stats()
-            return jsonify({
-                "tagDistribution": stats["predictionTagDistribution"],
-                "modelInfo": self.predictionEngine.get_model_info(),
-                "lateReturnHotspots": stats["lateReturnHotspots"]
-            })
-
-        @app.route("/api/predictions/books", methods=["GET"])
-        def prediction_books():
-            """Get books filtered by prediction tag."""
-            tag = request.args.get("tag", None)
-            page = request.args.get("page", 1, type=int)
-            page_size = request.args.get("pageSize", 50, type=int)
-
-            if not tag:
-                return jsonify({"error": "tag parameter required"}), 400
-
-            result = self.libraryService.filter_books(
-                prediction_tag=tag, page=page, page_size=page_size,
-                sort_by="checkouts", sort_order="desc"
-            )
-            return jsonify(result)
-
-    def initialize(self):
-        """Load data and optionally load pre-trained model."""
-        data_dir = "backend/data"
-        model_dir = "backend/ml/model"
-
-        // Check if data exists
-        if os.path.exists(f"{data_dir}/books.json"):
-            print("Loading existing data...")
-            self.libraryService.load_data(data_dir)
-        else:
-            print("No data found. Generating fresh dataset...")
-            data = generate_all_data()
-            save_data(data, data_dir)
-            self.libraryService.load_data(data_dir)
-
-        // Check if model exists
-        if os.path.exists(f"{model_dir}/rf_model.pkl"):
-            print("Loading pre-trained model...")
-            self.predictionEngine.load_model(model_dir)
-            predicted = self.predictionEngine.predict_books(self.libraryService.booksList)
-            self.libraryService.update_books_with_predictions(predicted)
-            self.mlReady = true
-        else:
-            print("No pre-trained model found. Training new model...")
-            self.predictionEngine.train(self.libraryService.booksList)
-            predicted = self.predictionEngine.predict_books(self.libraryService.booksList)
-            self.libraryService.update_books_with_predictions(predicted)
-            self.predictionEngine.save_model(model_dir)
-            self.mlReady = true
-
-    public void start() {
-        print(f"\n{'='*50}")
-        print(f"  Library Management System API")
-        print(f"  Running on http://localhost:{self.port}")
-        print(f"  ML Prediction Engine: {'Ready' if self.mlReady else 'Not Ready'}")
-        print(f"{'='*50}\n")
-        self.app.run(host="0.0.0.0", port=self.port, debug=false)
+def json_resp(data, status) {
+    return {
+        "status": status,
+        "body": json_encode(data),
+        "content_type": "application/json"
     }
 }
 
-// ─── Entry Point ───────────────────────────────────────────
+// ─── Route: GET /api/health ─────────────────────────────────
 
-if __name__ == "__main__":
-    server = LibraryServer(port=8080)
-    server.initialize()
-    server.start()
+def handle_health() {
+    return json_resp({
+        "status": "healthy",
+        "total_books": len(books),
+        "language": "UniLang"
+    }, 200)
+}
+
+// ─── Route: GET /api/books ──────────────────────────────────
+
+def handle_list_books() {
+    return json_resp({"books": books, "total": len(books)}, 200)
+}
+
+// ─── Route: GET /api/books/:id ──────────────────────────────
+
+def handle_get_book(book_id) {
+    for book in books {
+        if book["id"] == book_id {
+            return json_resp(book, 200)
+        }
+    }
+    return json_resp({"error": "Book not found", "id": book_id}, 404)
+}
+
+// ─── Route: POST /api/books ─────────────────────────────────
+
+def handle_create_book(body_str) {
+    if body_str == "" {
+        return json_resp({"error": "Request body is empty"}, 400)
+    }
+    data = json_decode(body_str)
+    if data == None {
+        return json_resp({"error": "Invalid JSON body"}, 400)
+    }
+    new_id = str(len(books) + 1)
+    book = {
+        "id": new_id,
+        "title": data["title"],
+        "author": data["author"],
+        "category": data["category"],
+        "status": "available",
+        "rating": 0.0,
+        "year": 0
+    }
+    books.append(book)
+    return json_resp(book, 201)
+}
+
+// ─── Route: PUT /api/books/:id/checkout ─────────────────────
+
+def handle_checkout(book_id) {
+    for i in range(len(books)) {
+        if books[i]["id"] == book_id {
+            if books[i]["status"] == "checked_out" {
+                return json_resp({"error": "Book is already checked out"}, 400)
+            }
+            books[i]["status"] = "checked_out"
+            return json_resp({"message": "Book checked out", "book": books[i]}, 200)
+        }
+    }
+    return json_resp({"error": "Book not found"}, 404)
+}
+
+// ─── Route: PUT /api/books/:id/return ───────────────────────
+
+def handle_return(book_id) {
+    for i in range(len(books)) {
+        if books[i]["id"] == book_id {
+            if books[i]["status"] == "available" {
+                return json_resp({"error": "Book is not checked out"}, 400)
+            }
+            books[i]["status"] = "available"
+            return json_resp({"message": "Book returned", "book": books[i]}, 200)
+        }
+    }
+    return json_resp({"error": "Book not found"}, 404)
+}
+
+// ─── Route: GET /api/books/search?q=... ─────────────────────
+
+def handle_search(query) {
+    query_lower = query.lower()
+    results = []
+    for book in books {
+        title_lower = book["title"].lower()
+        author_lower = book["author"].lower()
+        if title_lower.contains(query_lower) or author_lower.contains(query_lower) {
+            results.append(book)
+        }
+    }
+    return json_resp({"books": results, "total": len(results), "query": query}, 200)
+}
+
+// ─── Route: GET /api/categories ────────────────────────────
+
+def handle_categories() {
+    cats = []
+    for book in books {
+        cat = book["category"]
+        found = false
+        for c in cats {
+            if c == cat {
+                found = true
+            }
+        }
+        if not found {
+            cats.append(cat)
+        }
+    }
+    cats.sort()
+    return json_resp(cats, 200)
+}
+
+// ─── Router ─────────────────────────────────────────────────
+
+def router(req) {
+    method = req["method"]
+    path = req["path"]
+    query = req["query"]
+    body = req["body"]
+
+    // Health
+    if path == "/api/health" {
+        return handle_health()
+    }
+
+    // Book list or create
+    if path == "/api/books" {
+        if method == "GET" {
+            // Check for search query
+            if query != "" and query.startsWith("q=") {
+                q = query.substring(2, len(query))
+                return handle_search(q)
+            }
+            return handle_list_books()
+        }
+        if method == "POST" {
+            return handle_create_book(body)
+        }
+    }
+
+    // Categories
+    if path == "/api/categories" {
+        return handle_categories()
+    }
+
+    // /api/books/:id  or  /api/books/:id/checkout  or /api/books/:id/return
+    parts = path.split("/")
+    if len(parts) >= 4 and parts[1] == "api" and parts[2] == "books" {
+        book_id = parts[3]
+        if len(parts) == 4 {
+            return handle_get_book(book_id)
+        }
+        if len(parts) == 5 and parts[4] == "checkout" and method == "PUT" {
+            return handle_checkout(book_id)
+        }
+        if len(parts) == 5 and parts[4] == "return" and method == "PUT" {
+            return handle_return(book_id)
+        }
+    }
+
+    // 404 fallback
+    return json_resp({"error": "Endpoint not found", "path": path, "method": method}, 404)
+}
+
+// ─── Start Server ───────────────────────────────────────────
+
+print("==============================================")
+print("  Library Management API — UniLang Edition")
+print("  Books loaded: " + str(len(books)))
+print("  Starting on http://localhost:8080")
+print("==============================================")
+print("")
+print("Available endpoints:")
+print("  GET  /api/health")
+print("  GET  /api/books")
+print("  GET  /api/books/:id")
+print("  POST /api/books")
+print("  PUT  /api/books/:id/checkout")
+print("  PUT  /api/books/:id/return")
+print("  GET  /api/categories")
+print("  GET  /api/books?q=<search>")
+print("")
+
+serve(8080, router)

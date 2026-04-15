@@ -125,6 +125,11 @@ impl Analyzer {
             // Character
             "chr",
             "ord",
+            // JSON
+            "json_encode",
+            "json_decode",
+            // HTTP server
+            "serve",
         ];
         for name in PRELUDE_FUNCS {
             let symbol = Symbol {
