@@ -65,6 +65,10 @@ pub fn register_all(vm: &mut VM) {
     // I/O extras
     vm.register_builtin("format", builtin_format);
 
+    // File I/O
+    vm.register_builtin("read_file", builtin_read_file);
+    vm.register_builtin("file_exists", builtin_file_exists);
+
     vm.set_global("System", java_lang_system());
     vm.set_global("None", RuntimeValue::Null);
     vm.set_global("True", RuntimeValue::Bool(true));
@@ -362,4 +366,26 @@ fn builtin_format(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
         }
     }
     Ok(RuntimeValue::String(result))
+}
+
+fn builtin_read_file(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let path = match args.first() {
+        Some(RuntimeValue::String(s)) => s.clone(),
+        _ => return Err(RuntimeError::type_error("read_file() requires a string path")),
+    };
+    match std::fs::read_to_string(&path) {
+        Ok(content) => Ok(RuntimeValue::String(content)),
+        Err(e) => Err(RuntimeError::type_error(format!(
+            "read_file('{}') failed: {}",
+            path, e
+        ))),
+    }
+}
+
+fn builtin_file_exists(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let path = match args.first() {
+        Some(RuntimeValue::String(s)) => s.clone(),
+        _ => return Err(RuntimeError::type_error("file_exists() requires a string path")),
+    };
+    Ok(RuntimeValue::Bool(std::path::Path::new(&path).exists()))
 }

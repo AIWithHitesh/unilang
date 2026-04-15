@@ -128,6 +128,9 @@ impl Analyzer {
             // JSON
             "json_encode",
             "json_decode",
+            // File I/O
+            "read_file",
+            "file_exists",
             // HTTP server
             "serve",
         ];

@@ -1,54 +1,207 @@
-// server.uniL — Library Management REST API
-// Pure UniLang HTTP server — run with: unilang run server.uniL
+// server.uniL — Library Management Full REST API
+// Pure UniLang HTTP server — run from repo root with:
+//   unilang run examples/library-mgmt/backend/api/server.uniL
 
-// ─── In-memory book store ───────────────────────────────────
+// ─── In-memory book store (50 books) ────────────────────────────────────────
 
 books = [
-    {"id": "1", "title": "The Great Gatsby", "author": "F. Scott Fitzgerald",
-     "category": "Fiction", "status": "available", "rating": 4.2, "year": 1925},
-    {"id": "2", "title": "Clean Code", "author": "Robert C. Martin",
-     "category": "Technology", "status": "checked_out", "rating": 4.8, "year": 2008},
-    {"id": "3", "title": "The Pragmatic Programmer", "author": "David Thomas",
-     "category": "Technology", "status": "available", "rating": 4.7, "year": 1999},
-    {"id": "4", "title": "To Kill a Mockingbird", "author": "Harper Lee",
-     "category": "Fiction", "status": "available", "rating": 4.9, "year": 1960},
-    {"id": "5", "title": "Design Patterns", "author": "Gang of Four",
-     "category": "Technology", "status": "available", "rating": 4.5, "year": 1994},
-    {"id": "6", "title": "Dune", "author": "Frank Herbert",
-     "category": "Science Fiction", "status": "checked_out", "rating": 4.6, "year": 1965},
-    {"id": "7", "title": "1984", "author": "George Orwell",
-     "category": "Fiction", "status": "available", "rating": 4.7, "year": 1949},
-    {"id": "8", "title": "The Hobbit", "author": "J.R.R. Tolkien",
-     "category": "Fantasy", "status": "available", "rating": 4.8, "year": 1937}
+    {"id": "1",  "title": "The Great Gatsby",            "author": "F. Scott Fitzgerald", "isbn": "978-0743273565", "category": "Fiction",         "language": "English", "status": "available",   "totalCopies": 3, "availableCopies": 3, "pageCount": 180, "publishYear": 1925, "publisher": "Scribner",          "totalCheckouts": 120, "lateReturns": 8,  "onTimeReturns": 112, "averageRating": 4.2, "totalRatings": 45, "predictionTag": "popular"},
+    {"id": "2",  "title": "Clean Code",                  "author": "Robert C. Martin",    "isbn": "978-0132350884", "category": "Technology",      "language": "English", "status": "checked_out", "totalCopies": 2, "availableCopies": 0, "pageCount": 431, "publishYear": 2008, "publisher": "Prentice Hall",     "totalCheckouts": 200, "lateReturns": 5,  "onTimeReturns": 195, "averageRating": 4.8, "totalRatings": 80, "predictionTag": "high_demand"},
+    {"id": "3",  "title": "The Pragmatic Programmer",    "author": "David Thomas",        "isbn": "978-0135957059", "category": "Technology",      "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 352, "publishYear": 1999, "publisher": "Addison-Wesley",    "totalCheckouts": 175, "lateReturns": 10, "onTimeReturns": 165, "averageRating": 4.7, "totalRatings": 70, "predictionTag": "high_demand"},
+    {"id": "4",  "title": "To Kill a Mockingbird",       "author": "Harper Lee",          "isbn": "978-0061935466", "category": "Fiction",         "language": "English", "status": "available",   "totalCopies": 4, "availableCopies": 4, "pageCount": 281, "publishYear": 1960, "publisher": "Harper Perennial",  "totalCheckouts": 150, "lateReturns": 12, "onTimeReturns": 138, "averageRating": 4.9, "totalRatings": 90, "predictionTag": "popular"},
+    {"id": "5",  "title": "Design Patterns",             "author": "Gang of Four",        "isbn": "978-0201633610", "category": "Technology",      "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 395, "publishYear": 1994, "publisher": "Addison-Wesley",    "totalCheckouts": 160, "lateReturns": 7,  "onTimeReturns": 153, "averageRating": 4.5, "totalRatings": 60, "predictionTag": "high_demand"},
+    {"id": "6",  "title": "Dune",                        "author": "Frank Herbert",       "isbn": "978-0441013593", "category": "Science Fiction", "language": "English", "status": "checked_out", "totalCopies": 3, "availableCopies": 1, "pageCount": 688, "publishYear": 1965, "publisher": "Ace Books",         "totalCheckouts": 130, "lateReturns": 18, "onTimeReturns": 112, "averageRating": 4.6, "totalRatings": 55, "predictionTag": "popular"},
+    {"id": "7",  "title": "1984",                        "author": "George Orwell",       "isbn": "978-0451524935", "category": "Fiction",         "language": "English", "status": "available",   "totalCopies": 3, "availableCopies": 2, "pageCount": 328, "publishYear": 1949, "publisher": "Signet Classic",    "totalCheckouts": 180, "lateReturns": 15, "onTimeReturns": 165, "averageRating": 4.7, "totalRatings": 75, "predictionTag": "popular"},
+    {"id": "8",  "title": "The Hobbit",                  "author": "J.R.R. Tolkien",      "isbn": "978-0547928227", "category": "Fantasy",         "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 310, "publishYear": 1937, "publisher": "Houghton Mifflin",  "totalCheckouts": 140, "lateReturns": 6,  "onTimeReturns": 134, "averageRating": 4.8, "totalRatings": 65, "predictionTag": "popular"},
+    {"id": "9",  "title": "Sapiens",                     "author": "Yuval Noah Harari",   "isbn": "978-0062316097", "category": "History",         "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 443, "publishYear": 2011, "publisher": "Harper",            "totalCheckouts": 110, "lateReturns": 9,  "onTimeReturns": 101, "averageRating": 4.4, "totalRatings": 50, "predictionTag": "popular"},
+    {"id": "10", "title": "Atomic Habits",               "author": "James Clear",         "isbn": "978-0735211292", "category": "Self-Help",       "language": "English", "status": "checked_out", "totalCopies": 3, "availableCopies": 0, "pageCount": 320, "publishYear": 2018, "publisher": "Avery",             "totalCheckouts": 220, "lateReturns": 20, "onTimeReturns": 200, "averageRating": 4.8, "totalRatings": 95, "predictionTag": "high_demand"},
+    {"id": "11", "title": "The Alchemist",               "author": "Paulo Coelho",        "isbn": "978-0062315007", "category": "Fiction",         "language": "Portuguese", "status": "available", "totalCopies": 2, "availableCopies": 2, "pageCount": 208, "publishYear": 1988, "publisher": "HarperOne",         "totalCheckouts": 100, "lateReturns": 4,  "onTimeReturns": 96,  "averageRating": 4.3, "totalRatings": 48, "predictionTag": "popular"},
+    {"id": "12", "title": "Harry Potter and the Philosopher Stone", "author": "J.K. Rowling", "isbn": "978-0590353427", "category": "Fantasy", "language": "English", "status": "available", "totalCopies": 4, "availableCopies": 3, "pageCount": 309, "publishYear": 1997, "publisher": "Bloomsbury",        "totalCheckouts": 240, "lateReturns": 22, "onTimeReturns": 218, "averageRating": 4.9, "totalRatings": 100, "predictionTag": "high_demand"},
+    {"id": "13", "title": "The Lord of the Rings",       "author": "J.R.R. Tolkien",      "isbn": "978-0544003415", "category": "Fantasy",         "language": "English", "status": "checked_out", "totalCopies": 2, "availableCopies": 0, "pageCount": 1178,"publishYear": 1954, "publisher": "Houghton Mifflin",  "totalCheckouts": 135, "lateReturns": 14, "onTimeReturns": 121, "averageRating": 4.9, "totalRatings": 88, "predictionTag": "popular"},
+    {"id": "14", "title": "Introduction to Algorithms",  "author": "Cormen et al.",       "isbn": "978-0262033848", "category": "Technology",      "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 1292,"publishYear": 2009, "publisher": "MIT Press",          "totalCheckouts": 95,  "lateReturns": 3,  "onTimeReturns": 92,  "averageRating": 4.6, "totalRatings": 40, "predictionTag": "high_demand"},
+    {"id": "15", "title": "Thinking Fast and Slow",      "author": "Daniel Kahneman",     "isbn": "978-0374533557", "category": "Psychology",      "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 499, "publishYear": 2011, "publisher": "Farrar Straus",     "totalCheckouts": 115, "lateReturns": 11, "onTimeReturns": 104, "averageRating": 4.5, "totalRatings": 52, "predictionTag": "popular"},
+    {"id": "16", "title": "The Lean Startup",            "author": "Eric Ries",           "isbn": "978-0307887894", "category": "Business",        "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 336, "publishYear": 2011, "publisher": "Crown Business",    "totalCheckouts": 90,  "lateReturns": 6,  "onTimeReturns": 84,  "averageRating": 4.3, "totalRatings": 38, "predictionTag": "normal"},
+    {"id": "17", "title": "Zero to One",                 "author": "Peter Thiel",         "isbn": "978-0804139021", "category": "Business",        "language": "English", "status": "checked_out", "totalCopies": 2, "availableCopies": 1, "pageCount": 224, "publishYear": 2014, "publisher": "Crown Business",    "totalCheckouts": 85,  "lateReturns": 7,  "onTimeReturns": 78,  "averageRating": 4.2, "totalRatings": 35, "predictionTag": "normal"},
+    {"id": "18", "title": "Brief History of Time",       "author": "Stephen Hawking",     "isbn": "978-0553380163", "category": "Science",         "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 212, "publishYear": 1988, "publisher": "Bantam",            "totalCheckouts": 105, "lateReturns": 8,  "onTimeReturns": 97,  "averageRating": 4.4, "totalRatings": 47, "predictionTag": "popular"},
+    {"id": "19", "title": "The Selfish Gene",            "author": "Richard Dawkins",     "isbn": "978-0198788607", "category": "Science",         "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 360, "publishYear": 1976, "publisher": "Oxford University", "totalCheckouts": 70,  "lateReturns": 5,  "onTimeReturns": 65,  "averageRating": 4.3, "totalRatings": 30, "predictionTag": "normal"},
+    {"id": "20", "title": "Meditations",                 "author": "Marcus Aurelius",     "isbn": "978-0140449334", "category": "Philosophy",      "language": "Latin",   "status": "available",   "totalCopies": 3, "availableCopies": 3, "pageCount": 254, "publishYear": 180,  "publisher": "Penguin Classics",  "totalCheckouts": 80,  "lateReturns": 4,  "onTimeReturns": 76,  "averageRating": 4.7, "totalRatings": 42, "predictionTag": "popular"},
+    {"id": "21", "title": "Crime and Punishment",        "author": "Fyodor Dostoevsky",   "isbn": "978-0140449136", "category": "Fiction",         "language": "Russian", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 671, "publishYear": 1866, "publisher": "Penguin Classics",  "totalCheckouts": 60,  "lateReturns": 5,  "onTimeReturns": 55,  "averageRating": 4.6, "totalRatings": 33, "predictionTag": "normal"},
+    {"id": "22", "title": "The Art of War",              "author": "Sun Tzu",             "isbn": "978-1590302255", "category": "Philosophy",      "language": "Chinese", "status": "checked_out", "totalCopies": 3, "availableCopies": 2, "pageCount": 273, "publishYear": 500,  "publisher": "Shambhala",         "totalCheckouts": 75,  "lateReturns": 6,  "onTimeReturns": 69,  "averageRating": 4.4, "totalRatings": 36, "predictionTag": "normal"},
+    {"id": "23", "title": "Rich Dad Poor Dad",           "author": "Robert Kiyosaki",     "isbn": "978-1612680194", "category": "Business",        "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 336, "publishYear": 1997, "publisher": "Plata Publishing", "totalCheckouts": 95,  "lateReturns": 9,  "onTimeReturns": 86,  "averageRating": 4.1, "totalRatings": 41, "predictionTag": "popular"},
+    {"id": "24", "title": "The Power of Now",            "author": "Eckhart Tolle",       "isbn": "978-1577314806", "category": "Self-Help",       "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 229, "publishYear": 1997, "publisher": "New World Library", "totalCheckouts": 88,  "lateReturns": 7,  "onTimeReturns": 81,  "averageRating": 4.4, "totalRatings": 39, "predictionTag": "normal"},
+    {"id": "25", "title": "Good to Great",               "author": "Jim Collins",         "isbn": "978-0066620992", "category": "Business",        "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 300, "publishYear": 2001, "publisher": "HarperBusiness",    "totalCheckouts": 78,  "lateReturns": 5,  "onTimeReturns": 73,  "averageRating": 4.3, "totalRatings": 34, "predictionTag": "normal"},
+    {"id": "26", "title": "Cosmos",                      "author": "Carl Sagan",          "isbn": "978-0345539434", "category": "Science",         "language": "English", "status": "checked_out", "totalCopies": 2, "availableCopies": 1, "pageCount": 365, "publishYear": 1980, "publisher": "Ballantine Books",  "totalCheckouts": 82,  "lateReturns": 6,  "onTimeReturns": 76,  "averageRating": 4.6, "totalRatings": 38, "predictionTag": "popular"},
+    {"id": "27", "title": "Brave New World",             "author": "Aldous Huxley",       "isbn": "978-0060850524", "category": "Fiction",         "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 311, "publishYear": 1932, "publisher": "Harper Perennial",  "totalCheckouts": 98,  "lateReturns": 9,  "onTimeReturns": 89,  "averageRating": 4.5, "totalRatings": 44, "predictionTag": "popular"},
+    {"id": "28", "title": "Fahrenheit 451",              "author": "Ray Bradbury",        "isbn": "978-1451673319", "category": "Science Fiction", "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 158, "publishYear": 1953, "publisher": "Simon and Schuster","totalCheckouts": 90,  "lateReturns": 7,  "onTimeReturns": 83,  "averageRating": 4.4, "totalRatings": 43, "predictionTag": "normal"},
+    {"id": "29", "title": "The Catcher in the Rye",      "author": "J.D. Salinger",       "isbn": "978-0316769174", "category": "Fiction",         "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 277, "publishYear": 1951, "publisher": "Little Brown",      "totalCheckouts": 85,  "lateReturns": 10, "onTimeReturns": 75,  "averageRating": 4.0, "totalRatings": 46, "predictionTag": "normal"},
+    {"id": "30", "title": "Of Mice and Men",             "author": "John Steinbeck",      "isbn": "978-0140177398", "category": "Fiction",         "language": "English", "status": "checked_out", "totalCopies": 2, "availableCopies": 1, "pageCount": 112, "publishYear": 1937, "publisher": "Penguin Books",     "totalCheckouts": 72,  "lateReturns": 8,  "onTimeReturns": 64,  "averageRating": 4.1, "totalRatings": 32, "predictionTag": "normal"},
+    {"id": "31", "title": "The Hitchhiker Guide",        "author": "Douglas Adams",       "isbn": "978-0345391803", "category": "Science Fiction", "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 193, "publishYear": 1979, "publisher": "Del Rey",           "totalCheckouts": 105, "lateReturns": 6,  "onTimeReturns": 99,  "averageRating": 4.7, "totalRatings": 52, "predictionTag": "popular"},
+    {"id": "32", "title": "Ender Game",                  "author": "Orson Scott Card",    "isbn": "978-0812550702", "category": "Science Fiction", "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 324, "publishYear": 1985, "publisher": "Tor Books",         "totalCheckouts": 93,  "lateReturns": 7,  "onTimeReturns": 86,  "averageRating": 4.5, "totalRatings": 45, "predictionTag": "popular"},
+    {"id": "33", "title": "Foundation",                  "author": "Isaac Asimov",        "isbn": "978-0553293357", "category": "Science Fiction", "language": "English", "status": "checked_out", "totalCopies": 2, "availableCopies": 0, "pageCount": 244, "publishYear": 1951, "publisher": "Bantam Spectra",    "totalCheckouts": 88,  "lateReturns": 8,  "onTimeReturns": 80,  "averageRating": 4.6, "totalRatings": 48, "predictionTag": "popular"},
+    {"id": "34", "title": "The Martian",                 "author": "Andy Weir",           "isbn": "978-0553418026", "category": "Science Fiction", "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 369, "publishYear": 2011, "publisher": "Broadway Books",    "totalCheckouts": 112, "lateReturns": 9,  "onTimeReturns": 103, "averageRating": 4.7, "totalRatings": 55, "predictionTag": "popular"},
+    {"id": "35", "title": "The Code Book",               "author": "Simon Singh",         "isbn": "978-0385495325", "category": "Technology",      "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 402, "publishYear": 1999, "publisher": "Doubleday",         "totalCheckouts": 65,  "lateReturns": 4,  "onTimeReturns": 61,  "averageRating": 4.4, "totalRatings": 28, "predictionTag": "normal"},
+    {"id": "36", "title": "Python Crash Course",         "author": "Eric Matthes",        "isbn": "978-1593279288", "category": "Technology",      "language": "English", "status": "checked_out", "totalCopies": 3, "availableCopies": 1, "pageCount": 544, "publishYear": 2015, "publisher": "No Starch Press",   "totalCheckouts": 145, "lateReturns": 11, "onTimeReturns": 134, "averageRating": 4.6, "totalRatings": 58, "predictionTag": "high_demand"},
+    {"id": "37", "title": "The Innovators",              "author": "Walter Isaacson",     "isbn": "978-1476708690", "category": "History",         "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 542, "publishYear": 2014, "publisher": "Simon Schuster",    "totalCheckouts": 75,  "lateReturns": 5,  "onTimeReturns": 70,  "averageRating": 4.4, "totalRatings": 32, "predictionTag": "normal"},
+    {"id": "38", "title": "Outliers",                    "author": "Malcolm Gladwell",    "isbn": "978-0316017930", "category": "Psychology",      "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 309, "publishYear": 2008, "publisher": "Little Brown",      "totalCheckouts": 108, "lateReturns": 10, "onTimeReturns": 98,  "averageRating": 4.3, "totalRatings": 49, "predictionTag": "popular"},
+    {"id": "39", "title": "Educated",                    "author": "Tara Westover",       "isbn": "978-0399590504", "category": "Biography",       "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 334, "publishYear": 2018, "publisher": "Random House",      "totalCheckouts": 92,  "lateReturns": 7,  "onTimeReturns": 85,  "averageRating": 4.7, "totalRatings": 43, "predictionTag": "popular"},
+    {"id": "40", "title": "Becoming",                    "author": "Michelle Obama",      "isbn": "978-1524763138", "category": "Biography",       "language": "English", "status": "checked_out", "totalCopies": 2, "availableCopies": 0, "pageCount": 448, "publishYear": 2018, "publisher": "Crown",             "totalCheckouts": 130, "lateReturns": 12, "onTimeReturns": 118, "averageRating": 4.8, "totalRatings": 62, "predictionTag": "high_demand"},
+    {"id": "41", "title": "Man Search for Meaning",      "author": "Viktor Frankl",       "isbn": "978-0807014271", "category": "Psychology",      "language": "German",  "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 165, "publishYear": 1946, "publisher": "Beacon Press",      "totalCheckouts": 118, "lateReturns": 8,  "onTimeReturns": 110, "averageRating": 4.8, "totalRatings": 57, "predictionTag": "high_demand"},
+    {"id": "42", "title": "The Da Vinci Code",           "author": "Dan Brown",           "isbn": "978-0307474278", "category": "Fiction",         "language": "English", "status": "available",   "totalCopies": 3, "availableCopies": 2, "pageCount": 454, "publishYear": 2003, "publisher": "Anchor Books",      "totalCheckouts": 155, "lateReturns": 16, "onTimeReturns": 139, "averageRating": 4.0, "totalRatings": 66, "predictionTag": "popular"},
+    {"id": "43", "title": "Guns Germs and Steel",        "author": "Jared Diamond",       "isbn": "978-0393317558", "category": "History",         "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 498, "publishYear": 1997, "publisher": "W. W. Norton",      "totalCheckouts": 68,  "lateReturns": 4,  "onTimeReturns": 64,  "averageRating": 4.3, "totalRatings": 29, "predictionTag": "normal"},
+    {"id": "44", "title": "The Immortal Life of Henrietta", "author": "Rebecca Skloot",   "isbn": "978-1400052189", "category": "Science",         "language": "English", "status": "checked_out", "totalCopies": 2, "availableCopies": 1, "pageCount": 381, "publishYear": 2010, "publisher": "Crown Publishers",  "totalCheckouts": 74,  "lateReturns": 6,  "onTimeReturns": 68,  "averageRating": 4.5, "totalRatings": 33, "predictionTag": "normal"},
+    {"id": "45", "title": "Steve Jobs",                  "author": "Walter Isaacson",     "isbn": "978-1451648539", "category": "Biography",       "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 656, "publishYear": 2011, "publisher": "Simon Schuster",    "totalCheckouts": 102, "lateReturns": 9,  "onTimeReturns": 93,  "averageRating": 4.4, "totalRatings": 47, "predictionTag": "popular"},
+    {"id": "46", "title": "The Wind-Up Bird Chronicle",  "author": "Haruki Murakami",     "isbn": "978-0679775430", "category": "Fiction",         "language": "Japanese","status": "available",   "totalCopies": 2, "availableCopies": 1, "pageCount": 611, "publishYear": 1994, "publisher": "Vintage",           "totalCheckouts": 56,  "lateReturns": 4,  "onTimeReturns": 52,  "averageRating": 4.4, "totalRatings": 25, "predictionTag": "normal"},
+    {"id": "47", "title": "Anna Karenina",               "author": "Leo Tolstoy",         "isbn": "978-0143035008", "category": "Fiction",         "language": "Russian", "status": "checked_out", "totalCopies": 2, "availableCopies": 1, "pageCount": 864, "publishYear": 1877, "publisher": "Penguin Classics",  "totalCheckouts": 48,  "lateReturns": 5,  "onTimeReturns": 43,  "averageRating": 4.6, "totalRatings": 27, "predictionTag": "normal"},
+    {"id": "48", "title": "One Hundred Years of Solitude","author": "Gabriel Garcia Marquez","isbn": "978-0060883287","category": "Fiction",       "language": "Spanish", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 417, "publishYear": 1967, "publisher": "Harper Perennial",  "totalCheckouts": 64,  "lateReturns": 5,  "onTimeReturns": 59,  "averageRating": 4.7, "totalRatings": 31, "predictionTag": "normal"},
+    {"id": "49", "title": "The Midnight Library",        "author": "Matt Haig",           "isbn": "978-0525559474", "category": "Fiction",         "language": "English", "status": "available",   "totalCopies": 2, "availableCopies": 2, "pageCount": 304, "publishYear": 2020, "publisher": "Viking",            "totalCheckouts": 87,  "lateReturns": 6,  "onTimeReturns": 81,  "averageRating": 4.4, "totalRatings": 40, "predictionTag": "normal"},
+    {"id": "50", "title": "Project Hail Mary",           "author": "Andy Weir",           "isbn": "978-0593135204", "category": "Science Fiction", "language": "English", "status": "checked_out", "totalCopies": 2, "availableCopies": 0, "pageCount": 476, "publishYear": 2021, "publisher": "Ballantine Books",  "totalCheckouts": 99,  "lateReturns": 8,  "onTimeReturns": 91,  "averageRating": 4.9, "totalRatings": 50, "predictionTag": "high_demand"}
 ]
 
-// ─── Helper: JSON response builder ─────────────────────────
+// ─── CORS headers helper ─────────────────────────────────────────────────────
+
+def cors_headers() {
+    return {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization"
+    }
+}
+
+// ─── JSON response builder ───────────────────────────────────────────────────
 
 def json_resp(data, status) {
     return {
         "status": status,
         "body": json_encode(data),
-        "content_type": "application/json"
+        "content_type": "application/json",
+        "headers": cors_headers()
     }
 }
 
-// ─── Route: GET /api/health ─────────────────────────────────
+// ─── Query string parser: "key=val&key2=val2" → dict ────────────────────────
+
+def parse_query(qs) {
+    result = {}
+    if qs == "" {
+        return result
+    }
+    pairs = qs.split("&")
+    for pair in pairs {
+        kv = pair.split("=")
+        if len(kv) == 2 {
+            result[kv[0]] = kv[1]
+        }
+        if len(kv) == 1 {
+            result[kv[0]] = ""
+        }
+    }
+    return result
+}
+
+// ─── GET /api/health ─────────────────────────────────────────────────────────
 
 def handle_health() {
+    available = 0
+    checked = 0
+    for book in books {
+        if book["status"] == "available" {
+            available = available + 1
+        }
+        if book["status"] == "checked_out" {
+            checked = checked + 1
+        }
+    }
     return json_resp({
         "status": "healthy",
-        "total_books": len(books),
+        "totalBooks": len(books),
+        "availableBooks": available,
+        "checkedOutBooks": checked,
         "language": "UniLang"
     }, 200)
 }
 
-// ─── Route: GET /api/books ──────────────────────────────────
+// ─── GET /api/books ───────────────────────────────────────────────────────────
 
-def handle_list_books() {
-    return json_resp({"books": books, "total": len(books)}, 200)
+def handle_list_books(qs) {
+    params = parse_query(qs)
+
+    // Filtering
+    filtered = []
+    for book in books {
+        ok = true
+        if "category" in params {
+            cat_param = params["category"]
+            if cat_param != "" and cat_param != book["category"] {
+                ok = false
+            }
+        }
+        if "language" in params {
+            lang_param = params["language"]
+            if lang_param != "" and lang_param != book["language"] {
+                ok = false
+            }
+        }
+        if "status" in params {
+            st_param = params["status"]
+            if st_param != "" and st_param != book["status"] {
+                ok = false
+            }
+        }
+        if "search" in params {
+            q = params["search"].lower()
+            if q != "" {
+                t = book["title"].lower()
+                a = book["author"].lower()
+                if not t.contains(q) and not a.contains(q) {
+                    ok = false
+                }
+            }
+        }
+        if ok {
+            filtered.append(book)
+        }
+    }
+
+    total = len(filtered)
+
+    // Pagination
+    page = 1
+    page_size = 20
+    if "page" in params {
+        page = int(params["page"])
+    }
+    if "pageSize" in params {
+        page_size = int(params["pageSize"])
+    }
+
+    start = (page - 1) * page_size
+    end = start + page_size
+    if end > total {
+        end = total
+    }
+
+    paged = []
+    i = start
+    while i < end {
+        paged.append(filtered[i])
+        i = i + 1
+    }
+
+    total_pages = total / page_size
+    if total > total_pages * page_size {
+        total_pages = total_pages + 1
+    }
+
+    return json_resp({
+        "books": paged,
+        "total": total,
+        "page": page,
+        "pageSize": page_size,
+        "totalPages": total_pages
+    }, 200)
 }
 
-// ─── Route: GET /api/books/:id ──────────────────────────────
+// ─── GET /api/books/:id ───────────────────────────────────────────────────────
 
 def handle_get_book(book_id) {
     for book in books {
@@ -59,7 +212,7 @@ def handle_get_book(book_id) {
     return json_resp({"error": "Book not found", "id": book_id}, 404)
 }
 
-// ─── Route: POST /api/books ─────────────────────────────────
+// ─── POST /api/books ──────────────────────────────────────────────────────────
 
 def handle_create_book(body_str) {
     if body_str == "" {
@@ -74,16 +227,27 @@ def handle_create_book(body_str) {
         "id": new_id,
         "title": data["title"],
         "author": data["author"],
+        "isbn": "",
         "category": data["category"],
+        "language": "English",
         "status": "available",
-        "rating": 0.0,
-        "year": 0
+        "totalCopies": 1,
+        "availableCopies": 1,
+        "pageCount": 0,
+        "publishYear": 0,
+        "publisher": "",
+        "totalCheckouts": 0,
+        "lateReturns": 0,
+        "onTimeReturns": 0,
+        "averageRating": 0.0,
+        "totalRatings": 0,
+        "predictionTag": "normal"
     }
     books.append(book)
     return json_resp(book, 201)
 }
 
-// ─── Route: PUT /api/books/:id/checkout ─────────────────────
+// ─── PUT /api/books/:id/checkout ──────────────────────────────────────────────
 
 def handle_checkout(book_id) {
     for i in range(len(books)) {
@@ -92,13 +256,19 @@ def handle_checkout(book_id) {
                 return json_resp({"error": "Book is already checked out"}, 400)
             }
             books[i]["status"] = "checked_out"
+            books[i]["totalCheckouts"] = books[i]["totalCheckouts"] + 1
+            avail = books[i]["availableCopies"] - 1
+            if avail < 0 {
+                avail = 0
+            }
+            books[i]["availableCopies"] = avail
             return json_resp({"message": "Book checked out", "book": books[i]}, 200)
         }
     }
     return json_resp({"error": "Book not found"}, 404)
 }
 
-// ─── Route: PUT /api/books/:id/return ───────────────────────
+// ─── PUT /api/books/:id/return ────────────────────────────────────────────────
 
 def handle_return(book_id) {
     for i in range(len(books)) {
@@ -107,28 +277,19 @@ def handle_return(book_id) {
                 return json_resp({"error": "Book is not checked out"}, 400)
             }
             books[i]["status"] = "available"
+            avail = books[i]["availableCopies"] + 1
+            if avail > books[i]["totalCopies"] {
+                avail = books[i]["totalCopies"]
+            }
+            books[i]["availableCopies"] = avail
+            books[i]["onTimeReturns"] = books[i]["onTimeReturns"] + 1
             return json_resp({"message": "Book returned", "book": books[i]}, 200)
         }
     }
     return json_resp({"error": "Book not found"}, 404)
 }
 
-// ─── Route: GET /api/books/search?q=... ─────────────────────
-
-def handle_search(query) {
-    query_lower = query.lower()
-    results = []
-    for book in books {
-        title_lower = book["title"].lower()
-        author_lower = book["author"].lower()
-        if title_lower.contains(query_lower) or author_lower.contains(query_lower) {
-            results.append(book)
-        }
-    }
-    return json_resp({"books": results, "total": len(results), "query": query}, 200)
-}
-
-// ─── Route: GET /api/categories ────────────────────────────
+// ─── GET /api/categories ──────────────────────────────────────────────────────
 
 def handle_categories() {
     cats = []
@@ -144,11 +305,358 @@ def handle_categories() {
             cats.append(cat)
         }
     }
-    cats.sort()
     return json_resp(cats, 200)
 }
 
-// ─── Router ─────────────────────────────────────────────────
+// ─── GET /api/languages ───────────────────────────────────────────────────────
+
+def handle_languages() {
+    langs = []
+    for book in books {
+        lang = book["language"]
+        found = false
+        for l in langs {
+            if l == lang {
+                found = true
+            }
+        }
+        if not found {
+            langs.append(lang)
+        }
+    }
+    return json_resp(langs, 200)
+}
+
+// ─── GET /api/dashboard ───────────────────────────────────────────────────────
+// Returns overview stats, top checked-out, top rated, prediction tag distribution,
+// late return hotspots, and category stats.
+
+def handle_dashboard() {
+    total = len(books)
+    available = 0
+    checked = 0
+    total_reviews = 0
+    total_rating_sum = 0.0
+    total_checkouts_all = 0
+
+    for book in books {
+        if book["status"] == "available" {
+            available = available + 1
+        }
+        if book["status"] == "checked_out" {
+            checked = checked + 1
+        }
+        total_reviews = total_reviews + book["totalRatings"]
+        total_rating_sum = total_rating_sum + book["averageRating"]
+        total_checkouts_all = total_checkouts_all + book["totalCheckouts"]
+    }
+
+    avg_rating = 0.0
+    if total > 0 {
+        avg_rating = total_rating_sum / total
+    }
+
+    // Top 5 checked-out books (simple selection — no full sort needed)
+    top_co = []
+    used_co = []
+    k = 0
+    while k < 5 {
+        best_idx = -1
+        best_val = -1
+        j = 0
+        while j < total {
+            already = false
+            for u in used_co {
+                if u == j {
+                    already = true
+                }
+            }
+            if not already {
+                if books[j]["totalCheckouts"] > best_val {
+                    best_val = books[j]["totalCheckouts"]
+                    best_idx = j
+                }
+            }
+            j = j + 1
+        }
+        if best_idx >= 0 {
+            top_co.append({
+                "title": books[best_idx]["title"],
+                "author": books[best_idx]["author"],
+                "checkouts": books[best_idx]["totalCheckouts"]
+            })
+            used_co.append(best_idx)
+        }
+        k = k + 1
+    }
+
+    // Top 5 rated books
+    top_rated = []
+    used_r = []
+    k = 0
+    while k < 5 {
+        best_idx = -1
+        best_val = -1.0
+        j = 0
+        while j < total {
+            already = false
+            for u in used_r {
+                if u == j {
+                    already = true
+                }
+            }
+            if not already {
+                if books[j]["averageRating"] > best_val {
+                    best_val = books[j]["averageRating"]
+                    best_idx = j
+                }
+            }
+            j = j + 1
+        }
+        if best_idx >= 0 {
+            top_rated.append({
+                "title": books[best_idx]["title"],
+                "author": books[best_idx]["author"],
+                "rating": books[best_idx]["averageRating"]
+            })
+            used_r.append(best_idx)
+        }
+        k = k + 1
+    }
+
+    // Prediction tag distribution
+    tag_popular = 0
+    tag_high_demand = 0
+    tag_normal = 0
+    for book in books {
+        t = book["predictionTag"]
+        if t == "popular" {
+            tag_popular = tag_popular + 1
+        }
+        if t == "high_demand" {
+            tag_high_demand = tag_high_demand + 1
+        }
+        if t == "normal" {
+            tag_normal = tag_normal + 1
+        }
+    }
+
+    // Late return hotspots (books with highest lateReturns)
+    late_spots = []
+    used_l = []
+    k = 0
+    while k < 5 {
+        best_idx = -1
+        best_val = -1
+        j = 0
+        while j < total {
+            already = false
+            for u in used_l {
+                if u == j {
+                    already = true
+                }
+            }
+            if not already {
+                if books[j]["lateReturns"] > best_val {
+                    best_val = books[j]["lateReturns"]
+                    best_idx = j
+                }
+            }
+            j = j + 1
+        }
+        if best_idx >= 0 {
+            late_spots.append({
+                "title": books[best_idx]["title"],
+                "lateReturns": books[best_idx]["lateReturns"],
+                "totalCheckouts": books[best_idx]["totalCheckouts"]
+            })
+            used_l.append(best_idx)
+        }
+        k = k + 1
+    }
+
+    // Category stats (count available + checked_out per category)
+    // Use parallel arrays to avoid dict-in-loop clone issues
+    cat_names = []
+    cat_available = []
+    cat_checked = []
+
+    for book in books {
+        cat = book["category"]
+        found_idx = -1
+        ci = 0
+        while ci < len(cat_names) {
+            if cat_names[ci] == cat {
+                found_idx = ci
+            }
+            ci = ci + 1
+        }
+        if found_idx == -1 {
+            cat_names.append(cat)
+            if book["status"] == "available" {
+                cat_available.append(1)
+            } else {
+                cat_available.append(0)
+            }
+            if book["status"] == "checked_out" {
+                cat_checked.append(1)
+            } else {
+                cat_checked.append(0)
+            }
+        } else {
+            if book["status"] == "available" {
+                cat_available[found_idx] = cat_available[found_idx] + 1
+            }
+            if book["status"] == "checked_out" {
+                cat_checked[found_idx] = cat_checked[found_idx] + 1
+            }
+        }
+    }
+
+    cat_stats = []
+    ci = 0
+    while ci < len(cat_names) {
+        cat_stats.append({
+            "category": cat_names[ci],
+            "available": cat_available[ci],
+            "checkedOut": cat_checked[ci],
+            "total": cat_available[ci] + cat_checked[ci]
+        })
+        ci = ci + 1
+    }
+
+    dashboard = {
+        "overview": {
+            "totalBooks": total,
+            "availableBooks": available,
+            "checkedOutBooks": checked,
+            "totalReviews": total_reviews,
+            "averageRating": avg_rating,
+            "totalCheckouts": total_checkouts_all
+        },
+        "topCheckedOut": top_co,
+        "topRated": top_rated,
+        "predictionTagDistribution": {
+            "popular": tag_popular,
+            "high_demand": tag_high_demand,
+            "normal": tag_normal
+        },
+        "lateReturnHotspots": late_spots,
+        "categoryStats": cat_stats
+    }
+    return json_resp(dashboard, 200)
+}
+
+// ─── GET /api/predictions/stats ──────────────────────────────────────────────
+
+def handle_prediction_stats() {
+    total = len(books)
+    high_demand = 0
+    popular = 0
+    normal = 0
+    for book in books {
+        t = book["predictionTag"]
+        if t == "high_demand" {
+            high_demand = high_demand + 1
+        }
+        if t == "popular" {
+            popular = popular + 1
+        }
+        if t == "normal" {
+            normal = normal + 1
+        }
+    }
+    return json_resp({
+        "totalBooks": total,
+        "highDemand": high_demand,
+        "popular": popular,
+        "normal": normal,
+        "modelAccuracy": 0.87,
+        "lastUpdated": "2026-01-15"
+    }, 200)
+}
+
+// ─── GET /api/predictions/books ──────────────────────────────────────────────
+
+def handle_prediction_books(qs) {
+    params = parse_query(qs)
+    tag_filter = ""
+    if "tag" in params {
+        tag_filter = params["tag"]
+    }
+
+    result = []
+    for book in books {
+        if tag_filter == "" or book["predictionTag"] == tag_filter {
+            result.append({
+                "id": book["id"],
+                "title": book["title"],
+                "author": book["author"],
+                "predictionTag": book["predictionTag"],
+                "totalCheckouts": book["totalCheckouts"],
+                "averageRating": book["averageRating"]
+            })
+        }
+    }
+    return json_resp({"books": result, "total": len(result)}, 200)
+}
+
+// ─── Static file server ───────────────────────────────────────────────────────
+// Serve the frontend SPA files.
+// SERVER_ROOT must be set relative to where the server is run from.
+
+SERVER_ROOT = "examples/library-mgmt"
+
+def serve_static(url_path) {
+    file_path = SERVER_ROOT + "/frontend/public/index.html"
+    if url_path != "/" and url_path != "" {
+        file_path = SERVER_ROOT + "/frontend" + url_path
+    }
+
+    if not file_exists(file_path) {
+        // Try with public prefix for assets
+        file_path2 = SERVER_ROOT + "/frontend/public" + url_path
+        if file_exists(file_path2) {
+            file_path = file_path2
+        } else {
+            return {
+                "status": 404,
+                "body": "File not found: " + url_path,
+                "content_type": "text/plain",
+                "headers": cors_headers()
+            }
+        }
+    }
+
+    content = read_file(file_path)
+    ct = "text/plain"
+    if url_path.endsWith(".html") or url_path == "/" {
+        ct = "text/html"
+    }
+    if url_path.endsWith(".css") {
+        ct = "text/css"
+    }
+    if url_path.endsWith(".js") {
+        ct = "application/javascript"
+    }
+    if url_path.endsWith(".json") {
+        ct = "application/json"
+    }
+    if url_path.endsWith(".png") {
+        ct = "image/png"
+    }
+    if url_path.endsWith(".ico") {
+        ct = "image/x-icon"
+    }
+    return {
+        "status": 200,
+        "body": content,
+        "content_type": ct,
+        "headers": cors_headers()
+    }
+}
+
+// ─── Main router ──────────────────────────────────────────────────────────────
 
 def router(req) {
     method = req["method"]
@@ -156,67 +664,108 @@ def router(req) {
     query = req["query"]
     body = req["body"]
 
-    // Health
+    // OPTIONS preflight for CORS
+    if method == "OPTIONS" {
+        return {
+            "status": 204,
+            "body": "",
+            "content_type": "text/plain",
+            "headers": cors_headers()
+        }
+    }
+
+    // ── API routes ──
     if path == "/api/health" {
         return handle_health()
     }
+    if path == "/api/dashboard" {
+        return handle_dashboard()
+    }
+    if path == "/api/categories" {
+        return handle_categories()
+    }
+    if path == "/api/languages" {
+        return handle_languages()
+    }
+    if path == "/api/predictions/stats" {
+        return handle_prediction_stats()
+    }
+    if path == "/api/predictions/books" {
+        return handle_prediction_books(query)
+    }
 
-    // Book list or create
+    // /api/books and /api/books?...
     if path == "/api/books" {
         if method == "GET" {
-            // Check for search query
-            if query != "" and query.startsWith("q=") {
-                q = query.substring(2, len(query))
-                return handle_search(q)
-            }
-            return handle_list_books()
+            return handle_list_books(query)
         }
         if method == "POST" {
             return handle_create_book(body)
         }
     }
 
-    // Categories
-    if path == "/api/categories" {
-        return handle_categories()
-    }
-
-    // /api/books/:id  or  /api/books/:id/checkout  or /api/books/:id/return
+    // /api/books/:id  /api/books/:id/checkout  /api/books/:id/return
     parts = path.split("/")
-    if len(parts) >= 4 and parts[1] == "api" and parts[2] == "books" {
-        book_id = parts[3]
-        if len(parts) == 4 {
-            return handle_get_book(book_id)
-        }
-        if len(parts) == 5 and parts[4] == "checkout" and method == "PUT" {
-            return handle_checkout(book_id)
-        }
-        if len(parts) == 5 and parts[4] == "return" and method == "PUT" {
-            return handle_return(book_id)
+    nparts = len(parts)
+    if nparts >= 4 {
+        p1 = parts[1]
+        p2 = parts[2]
+        p3 = parts[3]
+        if p1 == "api" {
+            if p2 == "books" {
+                book_id = p3
+                if nparts == 4 {
+                    if method == "GET" {
+                        return handle_get_book(book_id)
+                    }
+                }
+                if nparts == 5 {
+                    p4 = parts[4]
+                    if p4 == "checkout" {
+                        if method == "PUT" {
+                            return handle_checkout(book_id)
+                        }
+                    }
+                    if p4 == "return" {
+                        if method == "PUT" {
+                            return handle_return(book_id)
+                        }
+                    }
+                }
+            }
         }
     }
 
-    // 404 fallback
+    // ── Static file serving (SPA frontend) ──
+    if not path.startsWith("/api") {
+        return serve_static(path)
+    }
+
+    // 404
     return json_resp({"error": "Endpoint not found", "path": path, "method": method}, 404)
 }
 
-// ─── Start Server ───────────────────────────────────────────
+// ─── Start ────────────────────────────────────────────────────────────────────
 
-print("==============================================")
-print("  Library Management API — UniLang Edition")
-print("  Books loaded: " + str(len(books)))
-print("  Starting on http://localhost:8080")
-print("==============================================")
+print("=============================================================")
+print("  Library Management System — UniLang Edition")
+print("  Books in store: " + str(len(books)))
+print("  Frontend:  http://localhost:8080")
+print("  API base:  http://localhost:8080/api")
+print("=============================================================")
 print("")
-print("Available endpoints:")
+print("API endpoints:")
 print("  GET  /api/health")
-print("  GET  /api/books")
+print("  GET  /api/dashboard")
+print("  GET  /api/books[?page=1&pageSize=20&category=X&search=Y]")
 print("  GET  /api/books/:id")
 print("  POST /api/books")
 print("  PUT  /api/books/:id/checkout")
 print("  PUT  /api/books/:id/return")
 print("  GET  /api/categories")
-print("  GET  /api/books?q=<search>")
+print("  GET  /api/languages")
+print("  GET  /api/predictions/stats")
+print("  GET  /api/predictions/books[?tag=popular]")
 print("")
 
 serve(8080, router)
