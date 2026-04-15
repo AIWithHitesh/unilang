@@ -65,21 +65,43 @@ UniLang is in **active development** with a working compiler pipeline:
 
 ## Downloads & Installation
 
-### UniLang CLI (Compiler + Language Server)
-Download from [GitHub Releases](https://github.com/hiteshkumar2187/unilang/releases):
+### Quick Install (recommended)
 
-| Platform | Download | Install |
-|----------|----------|---------|
-| macOS (Apple Silicon) | `unilang-cli-macos-arm64.tar.gz` | `tar xzf *.tar.gz && sudo cp bin/unilang /usr/local/bin/` |
-| macOS (Intel) | `unilang-cli-macos-x86_64.tar.gz` | `tar xzf *.tar.gz && sudo cp bin/unilang /usr/local/bin/` |
-| Windows | `unilang-cli-windows-x86_64.zip` | Extract, add `bin/` to PATH |
-| Linux | `unilang-cli-linux-x86_64.tar.gz` | `tar xzf *.tar.gz && sudo cp bin/unilang /usr/local/bin/` |
+**macOS / Linux** — paste in Terminal:
+```bash
+# macOS Apple Silicon
+curl -fsSL https://github.com/AIWithHitesh/unilang/releases/latest/download/unilang-cli-macos-arm64.tar.gz \
+  | tar xz && sudo cp unilang-cli-macos-arm64/bin/unilang /usr/local/bin/unilang
 
-> **macOS note:** After installing, run this once to clear the Gatekeeper quarantine flag:
-> ```bash
-> xattr -d com.apple.quarantine /usr/local/bin/unilang
-> ```
-> Or right-click the binary in Finder → **Open** → click **Open** in the dialog.
+# macOS Intel
+curl -fsSL https://github.com/AIWithHitesh/unilang/releases/latest/download/unilang-cli-macos-x86_64.tar.gz \
+  | tar xz && sudo cp unilang-cli-macos-x86_64/bin/unilang /usr/local/bin/unilang
+
+# Linux x86_64
+curl -fsSL https://github.com/AIWithHitesh/unilang/releases/latest/download/unilang-cli-linux-x86_64.tar.gz \
+  | tar xz && sudo cp unilang-cli-linux-x86_64/bin/unilang /usr/local/bin/unilang
+```
+
+> **Why `curl`?** Browsers tag downloaded files with a macOS quarantine flag that triggers the *"Apple could not verify..."* warning. Installing via `curl` in Terminal skips that flag entirely — no workarounds needed.
+
+**Windows** — download `unilang-cli-windows-x86_64.zip` from [Releases](https://github.com/AIWithHitesh/unilang/releases), extract, and add the `bin\` folder to your PATH.
+
+**Build from source** (no binary download at all):
+```bash
+git clone https://github.com/AIWithHitesh/unilang.git
+cd unilang
+cargo build --release
+sudo cp target/release/unilang /usr/local/bin/unilang
+```
+
+### Manual Download
+
+| Platform | File |
+|----------|------|
+| macOS (Apple Silicon) | `unilang-cli-macos-arm64.tar.gz` |
+| macOS (Intel) | `unilang-cli-macos-x86_64.tar.gz` |
+| Windows | `unilang-cli-windows-x86_64.zip` |
+| Linux | `unilang-cli-linux-x86_64.tar.gz` |
 
 ### IDE Plugins
 | IDE | Download | Installation Guide |
