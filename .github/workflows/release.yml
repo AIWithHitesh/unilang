@@ -48,14 +48,90 @@ jobs:
       - name: Build CLI and LSP
         run: cargo build --release --target ${{ matrix.target }}
 
-      # Ad-hoc code sign macOS binaries to prevent Gatekeeper "malware" warnings
-      - name: Sign macOS binaries
-        if: runner.os == 'macOS'
+      # ── macOS code signing + notarization ───────────────────
+      # If APPLE_DEVELOPER_CERT secret is set: sign with Developer ID + notarize.
+      # Otherwise: fall back to ad-hoc signing (works but shows Gatekeeper prompt).
+      #
+      # Required secrets for full signing:
+      #   APPLE_DEVELOPER_CERT          Base64-encoded Developer ID Application .p12
+      #   APPLE_DEVELOPER_CERT_PASSWORD Password for the .p12 file
+      #   APPLE_TEAM_ID                 10-character Apple Developer Team ID
+      #   APPLE_DEVELOPER_ID            Apple ID email used for notarization
+      #   APPLE_APP_PASSWORD            App-specific password (appleid.apple.com)
+      - name: Sign macOS binaries (Developer ID + notarization)
+        if: runner.os == 'macOS' && env.APPLE_DEVELOPER_CERT != ''
+        env:
+          APPLE_DEVELOPER_CERT: ${{ secrets.APPLE_DEVELOPER_CERT }}
+          APPLE_DEVELOPER_CERT_PASSWORD: ${{ secrets.APPLE_DEVELOPER_CERT_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_DEVELOPER_ID: ${{ secrets.APPLE_DEVELOPER_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
         run: |
-          for bin in target/${{ matrix.target }}/release/unilang target/${{ matrix.target }}/release/unilang-lsp; do
+          # Import certificate into a temporary keychain
+          KEYCHAIN_PATH="$RUNNER_TEMP/build.keychain"
+          KEYCHAIN_PASSWORD="$(openssl rand -hex 16)"
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+
+          echo "$APPLE_DEVELOPER_CERT" | base64 --decode -o "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" \
+            -k "$KEYCHAIN_PATH" \
+            -P "$APPLE_DEVELOPER_CERT_PASSWORD" \
+            -T /usr/bin/codesign
+          security set-key-partition-list \
+            -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
+          security list-keychain -d user -s "$KEYCHAIN_PATH"
+
+          # Resolve signing identity
+          IDENTITY=$(security find-identity -v -p codesigning "$KEYCHAIN_PATH" \
+            | grep "Developer ID Application" | head -1 \
+            | sed 's/.*"\(.*\)".*/\1/')
+          echo "Signing identity: $IDENTITY"
+
+          # Sign all binaries with Developer ID
+          for bin in target/${{ matrix.target }}/release/unilang \
+                     target/${{ matrix.target }}/release/unilang-lsp; do
+            if [ -f "$bin" ]; then
+              codesign --force --options runtime \
+                --sign "$IDENTITY" \
+                --timestamp \
+                "$bin"
+              echo "Signed: $bin"
+            fi
+          done
+
+          # Notarize each binary (zip → submit → wait → staple not possible on CLI binary,
+          # but notarization still allows Gatekeeper to pass online check)
+          for bin in target/${{ matrix.target }}/release/unilang \
+                     target/${{ matrix.target }}/release/unilang-lsp; do
+            if [ -f "$bin" ]; then
+              ZIP="$RUNNER_TEMP/$(basename $bin)-notarize.zip"
+              ditto -c -k --keepParent "$bin" "$ZIP"
+              xcrun notarytool submit "$ZIP" \
+                --apple-id "$APPLE_DEVELOPER_ID" \
+                --password "$APPLE_APP_PASSWORD" \
+                --team-id "$APPLE_TEAM_ID" \
+                --wait \
+                --timeout 10m
+              echo "Notarized: $bin"
+            fi
+          done
+
+          # Clean up keychain
+          security delete-keychain "$KEYCHAIN_PATH"
+
+      - name: Sign macOS binaries (ad-hoc fallback)
+        if: runner.os == 'macOS' && env.APPLE_DEVELOPER_CERT == ''
+        env:
+          APPLE_DEVELOPER_CERT: ${{ secrets.APPLE_DEVELOPER_CERT }}
+        run: |
+          echo "No APPLE_DEVELOPER_CERT secret found — using ad-hoc signing (Gatekeeper prompt will appear on first run)"
+          for bin in target/${{ matrix.target }}/release/unilang \
+                     target/${{ matrix.target }}/release/unilang-lsp; do
             if [ -f "$bin" ]; then
               codesign --force --deep -s - "$bin"
-              echo "Signed: $bin"
+              echo "Ad-hoc signed: $bin"
             fi
           done
 
