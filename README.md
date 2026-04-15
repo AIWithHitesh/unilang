@@ -70,10 +70,16 @@ Download from [GitHub Releases](https://github.com/hiteshkumar2187/unilang/relea
 
 | Platform | Download | Install |
 |----------|----------|---------|
-| macOS (Apple Silicon) | `unilang-cli-macos-arm64.dmg` | Open DMG, drag to `/usr/local/bin/` |
+| macOS (Apple Silicon) | `unilang-cli-macos-arm64.tar.gz` | `tar xzf *.tar.gz && sudo cp bin/unilang /usr/local/bin/` |
 | macOS (Intel) | `unilang-cli-macos-x86_64.tar.gz` | `tar xzf *.tar.gz && sudo cp bin/unilang /usr/local/bin/` |
 | Windows | `unilang-cli-windows-x86_64.zip` | Extract, add `bin/` to PATH |
 | Linux | `unilang-cli-linux-x86_64.tar.gz` | `tar xzf *.tar.gz && sudo cp bin/unilang /usr/local/bin/` |
+
+> **macOS note:** After installing, run this once to clear the Gatekeeper quarantine flag:
+> ```bash
+> xattr -d com.apple.quarantine /usr/local/bin/unilang
+> ```
+> Or right-click the binary in Finder → **Open** → click **Open** in the dialog.
 
 ### IDE Plugins
 | IDE | Download | Installation Guide |
