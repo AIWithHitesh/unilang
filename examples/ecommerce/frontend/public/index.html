@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SHYNX — Fashion Forward</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/styles/main.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Top announcement bar -->
+    <div class="announcement-bar">
+      <span>✨ FREE SHIPPING on orders above ₹999 &nbsp;|&nbsp; Use code <b>SHYNX10</b> for 10% off</span>
+    </div>
+
+    <!-- Header -->
+    <header class="header" id="mainHeader">
+      <div class="header-inner">
+        <button class="nav-toggle" id="navToggle" aria-label="Menu">
+          <span></span><span></span><span></span>
+        </button>
+
+        <a href="#" class="logo" id="logoBtn">SHYNX</a>
+
+        <nav class="main-nav" id="mainNav">
+          <a href="#" data-view="home"         class="nav-link active">Home</a>
+          <a href="#" data-view="women"        class="nav-link">Women</a>
+          <a href="#" data-view="men"          class="nav-link">Men</a>
+          <a href="#" data-view="trending"     class="nav-link">Trending</a>
+          <a href="#" data-view="new-arrivals" class="nav-link">New In</a>
+          <a href="#" data-view="sale"         class="nav-link sale-link">SALE</a>
+        </nav>
+
+        <div class="header-actions">
+          <div class="search-bar" id="searchBarContainer">
+            <input type="text" id="searchInput" placeholder="Search brands, styles…" autocomplete="off" />
+            <button id="searchBtn" class="icon-btn" aria-label="Search">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            </button>
+          </div>
+          <button class="icon-btn" id="wishlistBtn" aria-label="Wishlist">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+          </button>
+          <button class="icon-btn cart-btn" id="cartBtn" aria-label="Cart">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+            <span class="cart-count" id="cartCount">0</span>
+          </button>
+          <button class="icon-btn" id="profileBtn" aria-label="Account">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Search results dropdown -->
+      <div class="search-dropdown" id="searchDropdown"></div>
+    </header>
+
+    <!-- Main content -->
+    <main id="mainContent"></main>
+
+    <!-- Cart Sidebar -->
+    <div class="cart-overlay" id="cartOverlay"></div>
+    <aside class="cart-sidebar" id="cartSidebar">
+      <div class="cart-header">
+        <h2>Shopping Bag <span id="cartItemLabel"></span></h2>
+        <button class="close-btn" id="closeCart">&times;</button>
+      </div>
+      <div class="cart-items" id="cartItems"></div>
+      <div class="cart-footer" id="cartFooter"></div>
+    </aside>
+
+    <!-- Auth Modal -->
+    <div class="modal-overlay" id="authOverlay"></div>
+    <div class="modal" id="authModal">
+      <button class="close-btn modal-close" id="closeAuth">&times;</button>
+      <div id="authContent"></div>
+    </div>
+
+    <!-- Toast notification -->
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="/src/utils/api.js"></script>
+  <script src="/src/components/home.js"></script>
+  <script src="/src/components/plp.js"></script>
+  <script src="/src/components/pdp.js"></script>
+  <script src="/src/components/cart.js"></script>
+  <script src="/src/components/checkout.js"></script>
+  <script src="/src/app.js"></script>
+</body>
+</html>

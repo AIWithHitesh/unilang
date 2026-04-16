@@ -6,6 +6,7 @@
 use std::collections::HashMap;
 
 use unilang_codegen::bytecode::{Bytecode, ClassDef, Function, Opcode};
+use rusqlite::types::ValueRef as SqlValueRef;
 
 use crate::error::{ErrorKind, RuntimeError};
 use crate::value::{InstanceData, RuntimeValue};
@@ -48,6 +49,12 @@ pub struct VM {
     output: Option<Vec<String>>,
     /// Registered builtin functions.
     builtins: HashMap<String, BuiltinFn>,
+    /// SQLite connection — None until db_connect() is called.
+    db_conn: Option<rusqlite::Connection>,
+    /// Redis connection — None until redis_connect() is called.
+    redis_conn: Option<redis::Connection>,
+    /// In-memory Kafka event log — (topic, key, payload).
+    kafka_log: Vec<(String, String, String)>,
 }
 
 impl VM {
@@ -61,6 +68,9 @@ impl VM {
             classes: Vec::new(),
             output: None,
             builtins: HashMap::new(),
+            db_conn: None,
+            redis_conn: None,
+            kafka_log: Vec::new(),
         }
     }
 
@@ -1126,6 +1136,298 @@ impl VM {
             return self.run_http_server(port, func_idx);
         }
 
+        // ── Database (SQLite via rusqlite) ───────────────────────────────────
+        if name == "db_connect" {
+            let path = match args.first() {
+                Some(RuntimeValue::String(s)) => s.trim_start_matches("sqlite://").to_string(),
+                _ => return Err(RuntimeError::type_error("db_connect(path) requires a string path")),
+            };
+            let conn = if path == ":memory:" {
+                rusqlite::Connection::open_in_memory()
+                    .map_err(|e| RuntimeError::type_error(format!("db_connect: {}", e)))?
+            } else {
+                rusqlite::Connection::open(&path)
+                    .map_err(|e| RuntimeError::type_error(format!("db_connect: {}", e)))?
+            };
+            self.db_conn = Some(conn);
+            return Ok(RuntimeValue::Bool(true));
+        }
+
+        if name == "db_query" {
+            let sql = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("db_query(sql, params?) requires a SQL string")),
+            };
+            let sql_params: Vec<rusqlite::types::Value> = if args.len() > 1 {
+                match &args[1] {
+                    RuntimeValue::List(items) => items.iter().map(runtime_to_sql_value).collect(),
+                    _ => vec![],
+                }
+            } else {
+                vec![]
+            };
+            let conn = self.db_conn.as_ref()
+                .ok_or_else(|| RuntimeError::type_error("db_query: call db_connect() first"))?;
+            let mut stmt = conn.prepare(&sql)
+                .map_err(|e| RuntimeError::type_error(format!("db_query: {}", e)))?;
+            let col_count = stmt.column_count();
+            let col_names: Vec<String> = (0..col_count)
+                .map(|i| stmt.column_name(i).unwrap_or("?").to_string())
+                .collect();
+            let mut query_rows = stmt.query(rusqlite::params_from_iter(sql_params.iter()))
+                .map_err(|e| RuntimeError::type_error(format!("db_query: {}", e)))?;
+            let mut rows = Vec::new();
+            while let Some(row) = query_rows.next()
+                .map_err(|e| RuntimeError::type_error(format!("db_query row: {}", e)))?
+            {
+                let mut pairs = Vec::new();
+                for (i, col_name) in col_names.iter().enumerate() {
+                    let rv = match row.get_ref(i).unwrap_or(SqlValueRef::Null) {
+                        SqlValueRef::Null => RuntimeValue::Null,
+                        SqlValueRef::Integer(n) => RuntimeValue::Int(n),
+                        SqlValueRef::Real(f) => RuntimeValue::Float(f),
+                        SqlValueRef::Text(b) => RuntimeValue::String(String::from_utf8_lossy(b).to_string()),
+                        SqlValueRef::Blob(b) => RuntimeValue::String(String::from_utf8_lossy(b).to_string()),
+                    };
+                    pairs.push((RuntimeValue::String(col_name.clone()), rv));
+                }
+                rows.push(RuntimeValue::Dict(pairs));
+            }
+            return Ok(RuntimeValue::List(rows));
+        }
+
+        if name == "db_exec" {
+            let sql = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("db_exec(sql, params?) requires a SQL string")),
+            };
+            let sql_params: Vec<rusqlite::types::Value> = if args.len() > 1 {
+                match &args[1] {
+                    RuntimeValue::List(items) => items.iter().map(runtime_to_sql_value).collect(),
+                    _ => vec![],
+                }
+            } else {
+                vec![]
+            };
+            let conn = self.db_conn.as_ref()
+                .ok_or_else(|| RuntimeError::type_error("db_exec: call db_connect() first"))?;
+            let affected = conn.execute(&sql, rusqlite::params_from_iter(sql_params.iter()))
+                .map_err(|e| RuntimeError::type_error(format!("db_exec: {}", e)))?;
+            let last_id = conn.last_insert_rowid();
+            return Ok(RuntimeValue::Dict(vec![
+                (RuntimeValue::String("affectedRows".to_string()), RuntimeValue::Int(affected as i64)),
+                (RuntimeValue::String("insertId".to_string()), RuntimeValue::Int(last_id)),
+            ]));
+        }
+
+        // ── Redis ────────────────────────────────────────────────────────────
+        if name == "redis_connect" {
+            let url = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_connect(url) requires a string URL")),
+            };
+            let client = redis::Client::open(url.as_str())
+                .map_err(|e| RuntimeError::type_error(format!("redis_connect failed: {}", e)))?;
+            let conn = client.get_connection()
+                .map_err(|e| RuntimeError::type_error(format!("redis_connect: {}", e)))?;
+            self.redis_conn = Some(conn);
+            return Ok(RuntimeValue::Bool(true));
+        }
+
+        if name == "redis_get" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_get(key)")),
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_get: call redis_connect() first"))?;
+            let val: Option<String> = redis::cmd("GET").arg(&key).query(conn)
+                .map_err(|e| RuntimeError::type_error(format!("redis_get: {}", e)))?;
+            return Ok(val.map(RuntimeValue::String).unwrap_or(RuntimeValue::Null));
+        }
+
+        if name == "redis_set" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_set(key, value)")),
+            };
+            let val = match args.get(1) {
+                Some(v) => format!("{}", v),
+                None => return Err(RuntimeError::type_error("redis_set(key, value)")),
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_set: call redis_connect() first"))?;
+            redis::cmd("SET").arg(&key).arg(&val).execute(conn);
+            return Ok(RuntimeValue::Null);
+        }
+
+        if name == "redis_setex" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_setex(key, value, seconds)")),
+            };
+            let val = match args.get(1) {
+                Some(v) => format!("{}", v),
+                None => return Err(RuntimeError::type_error("redis_setex(key, value, seconds)")),
+            };
+            let secs = match args.get(2) {
+                Some(RuntimeValue::Int(n)) => *n,
+                Some(RuntimeValue::Float(f)) => *f as i64,
+                _ => 3600,
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_setex: call redis_connect() first"))?;
+            redis::cmd("SETEX").arg(&key).arg(secs).arg(&val).execute(conn);
+            return Ok(RuntimeValue::Null);
+        }
+
+        if name == "redis_del" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_del(key)")),
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_del: call redis_connect() first"))?;
+            redis::cmd("DEL").arg(&key).execute(conn);
+            return Ok(RuntimeValue::Null);
+        }
+
+        if name == "redis_exists" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_exists(key)")),
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_exists: call redis_connect() first"))?;
+            let exists: bool = redis::cmd("EXISTS").arg(&key).query(conn)
+                .unwrap_or(false);
+            return Ok(RuntimeValue::Bool(exists));
+        }
+
+        if name == "redis_incr" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_incr(key)")),
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_incr: call redis_connect() first"))?;
+            let val: i64 = redis::cmd("INCR").arg(&key).query(conn)
+                .map_err(|e| RuntimeError::type_error(format!("redis_incr: {}", e)))?;
+            return Ok(RuntimeValue::Int(val));
+        }
+
+        if name == "redis_hset" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_hset(key, field, value)")),
+            };
+            let field = match args.get(1) {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_hset(key, field, value)")),
+            };
+            let val = match args.get(2) {
+                Some(v) => format!("{}", v),
+                None => return Err(RuntimeError::type_error("redis_hset(key, field, value)")),
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_hset: call redis_connect() first"))?;
+            redis::cmd("HSET").arg(&key).arg(&field).arg(&val).execute(conn);
+            return Ok(RuntimeValue::Null);
+        }
+
+        if name == "redis_hget" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_hget(key, field)")),
+            };
+            let field = match args.get(1) {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_hget(key, field)")),
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_hget: call redis_connect() first"))?;
+            let val: Option<String> = redis::cmd("HGET").arg(&key).arg(&field).query(conn)
+                .map_err(|e| RuntimeError::type_error(format!("redis_hget: {}", e)))?;
+            return Ok(val.map(RuntimeValue::String).unwrap_or(RuntimeValue::Null));
+        }
+
+        if name == "redis_hgetall" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_hgetall(key)")),
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_hgetall: call redis_connect() first"))?;
+            let pairs: Vec<(String, String)> = redis::cmd("HGETALL").arg(&key).query(conn)
+                .unwrap_or_default();
+            let dict: Vec<(RuntimeValue, RuntimeValue)> = pairs.into_iter()
+                .map(|(k, v)| (RuntimeValue::String(k), RuntimeValue::String(v)))
+                .collect();
+            return Ok(RuntimeValue::Dict(dict));
+        }
+
+        if name == "redis_hdel" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_hdel(key, field)")),
+            };
+            let field = match args.get(1) {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_hdel(key, field)")),
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_hdel: call redis_connect() first"))?;
+            redis::cmd("HDEL").arg(&key).arg(&field).execute(conn);
+            return Ok(RuntimeValue::Null);
+        }
+
+        if name == "redis_expire" {
+            let key = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("redis_expire(key, seconds)")),
+            };
+            let secs = match args.get(1) {
+                Some(RuntimeValue::Int(n)) => *n,
+                _ => 3600,
+            };
+            let conn = self.redis_conn.as_mut()
+                .ok_or_else(|| RuntimeError::type_error("redis_expire: call redis_connect() first"))?;
+            redis::cmd("EXPIRE").arg(&key).arg(secs).execute(conn);
+            return Ok(RuntimeValue::Null);
+        }
+
+        // ── Kafka (in-memory event log) ──────────────────────────────────────
+        if name == "kafka_produce" {
+            let topic = match args.first() {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                _ => return Err(RuntimeError::type_error("kafka_produce(topic, key, payload)")),
+            };
+            let key = match args.get(1) {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                Some(v) => format!("{}", v),
+                None => "".to_string(),
+            };
+            let payload = match args.get(2) {
+                Some(RuntimeValue::String(s)) => s.clone(),
+                Some(v) => format!("{}", v),
+                None => "{}".to_string(),
+            };
+            println!("[KAFKA] topic={} key={} payload={}", topic, key, payload);
+            self.kafka_log.push((topic, key, payload));
+            return Ok(RuntimeValue::Bool(true));
+        }
+
+        if name == "kafka_events" {
+            let events: Vec<RuntimeValue> = self.kafka_log.iter().map(|(t, k, p)| {
+                RuntimeValue::Dict(vec![
+                    (RuntimeValue::String("topic".to_string()), RuntimeValue::String(t.clone())),
+                    (RuntimeValue::String("key".to_string()), RuntimeValue::String(k.clone())),
+                    (RuntimeValue::String("payload".to_string()), RuntimeValue::String(p.clone())),
+                ])
+            }).collect();
+            return Ok(RuntimeValue::List(events));
+        }
+
         if let Some(func) = self.builtins.get(name) {
             func(args)
         } else {
@@ -1346,6 +1648,18 @@ impl VM {
                 op_name, a, b
             ))),
         }
+    }
+}
+
+/// Convert a RuntimeValue to a rusqlite Value for parameterized queries.
+fn runtime_to_sql_value(v: &RuntimeValue) -> rusqlite::types::Value {
+    match v {
+        RuntimeValue::Int(n) => rusqlite::types::Value::Integer(*n),
+        RuntimeValue::Float(f) => rusqlite::types::Value::Real(*f),
+        RuntimeValue::Bool(b) => rusqlite::types::Value::Integer(if *b { 1 } else { 0 }),
+        RuntimeValue::String(s) => rusqlite::types::Value::Text(s.clone()),
+        RuntimeValue::Null => rusqlite::types::Value::Null,
+        other => rusqlite::types::Value::Text(format!("{}", other)),
     }
 }
 

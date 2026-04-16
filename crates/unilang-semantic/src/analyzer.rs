@@ -131,6 +131,26 @@ impl Analyzer {
             // File I/O
             "read_file",
             "file_exists",
+            // Database (MySQL)
+            "db_connect",
+            "db_query",
+            "db_exec",
+            // Redis cache
+            "redis_connect",
+            "redis_get",
+            "redis_set",
+            "redis_setex",
+            "redis_del",
+            "redis_exists",
+            "redis_incr",
+            "redis_hset",
+            "redis_hget",
+            "redis_hgetall",
+            "redis_hdel",
+            "redis_expire",
+            // Kafka events
+            "kafka_produce",
+            "kafka_events",
             // HTTP server
             "serve",
         ];

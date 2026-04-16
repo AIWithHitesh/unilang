@@ -1,0 +1,1442 @@
+// ============================================================
+//  SHYNX — Fashion E-Commerce Backend
+//  UniLang demonstration: Java-style OOP + Python-style logic
+//  SQLite (embedded) • Redis (cache) • Kafka (async events)
+// ============================================================
+
+// ─── Java-style entity classes ───────────────────────────────
+
+class Product {
+    String id;
+    String name;
+    String brand;
+    String category;
+    String subcategory;
+    float  price;
+    float  originalPrice;
+    int    discount;
+    String imageUrl;
+    String description;
+    List   sizes;
+    List   colors;
+    int    stock;
+    float  rating;
+    int    reviewCount;
+    bool   isTrending;
+    bool   isNew;
+    String gender;
+    List   tags;
+
+    Product(id, name, brand, category, subcategory, price, originalPrice,
+            imageUrl, description, sizes, colors, stock, rating, reviewCount,
+            isTrending, isNew, gender, tags) {
+        this.id           = id;
+        this.name         = name;
+        this.brand        = brand;
+        this.category     = category;
+        this.subcategory  = subcategory;
+        this.price        = price;
+        this.originalPrice = originalPrice;
+        this.discount     = round((originalPrice - price) / originalPrice * 100);
+        this.imageUrl     = imageUrl;
+        this.description  = description;
+        this.sizes        = sizes;
+        this.colors       = colors;
+        this.stock        = stock;
+        this.rating       = rating;
+        this.reviewCount  = reviewCount;
+        this.isTrending   = isTrending;
+        this.isNew        = isNew;
+        this.gender       = gender;
+        this.tags         = tags;
+    }
+
+    // Java-style getters
+    String getId()         { return this.id; }
+    String getName()       { return this.name; }
+    float  getPrice()      { return this.price; }
+    String getCategory()   { return this.category; }
+    int    getStock()      { return this.stock; }
+    float  getRating()     { return this.rating; }
+    bool   isAvailable()   { return this.stock > 0; }
+
+    // Python-style utility
+    def to_dict() {
+        return {
+            "id": this.id,
+            "name": this.name,
+            "brand": this.brand,
+            "category": this.category,
+            "subcategory": this.subcategory,
+            "price": this.price,
+            "originalPrice": this.originalPrice,
+            "discount": this.discount,
+            "imageUrl": this.imageUrl,
+            "description": this.description,
+            "sizes": this.sizes,
+            "colors": this.colors,
+            "stock": this.stock,
+            "rating": this.rating,
+            "reviewCount": this.reviewCount,
+            "isTrending": this.isTrending,
+            "isNew": this.isNew,
+            "gender": this.gender,
+            "tags": this.tags,
+            "available": this.stock > 0
+        };
+    }
+}
+
+class CartItem {
+    String productId;
+    String name;
+    float  price;
+    String size;
+    String color;
+    int    quantity;
+    String imageUrl;
+
+    CartItem(productId, name, price, size, color, quantity, imageUrl) {
+        this.productId = productId;
+        this.name      = name;
+        this.price     = price;
+        this.size      = size;
+        this.color     = color;
+        this.quantity  = quantity;
+        this.imageUrl  = imageUrl;
+    }
+
+    float getSubtotal() { return this.price * this.quantity; }
+}
+
+class Order {
+    String id;
+    String userId;
+    List   items;
+    float  total;
+    String status;
+    String address;
+    String paymentMethod;
+    String createdAt;
+    String estimatedDelivery;
+
+    Order(id, userId, items, total, address, paymentMethod, createdAt) {
+        this.id               = id;
+        this.userId           = userId;
+        this.items            = items;
+        this.total            = total;
+        this.status           = "CONFIRMED";
+        this.address          = address;
+        this.paymentMethod    = paymentMethod;
+        this.createdAt        = createdAt;
+        this.estimatedDelivery = "3-5 business days";
+    }
+
+    String getStatus()      { return this.status; }
+    void   setStatus(s)     { this.status = s; }
+    float  getTotal()       { return this.total; }
+}
+
+// ─── Recommendation Engine (Python-style ML logic) ───────────
+
+class RecommendationEngine {
+    // Feature weights for scoring
+    float w_rating   = 0.35;
+    float w_trending = 0.25;
+    float w_sales    = 0.20;
+    float w_new      = 0.10;
+    float w_discount = 0.10;
+
+    RecommendationEngine() {}
+
+    // PLP recommendations: filter + score for listing pages
+    def recommend_plp(products, category, gender, limit) {
+        scored = [];
+        i = 0;
+        while i < len(products) {
+            p = products[i];
+            i = i + 1;
+            cat_match = 0;
+            gen_match = 0;
+            if p["category"] == category { cat_match = 1; }
+            if category == "" { cat_match = 1; }
+            if p["gender"] == gender { gen_match = 1; }
+            if gender == "all" { gen_match = 1; }
+            if gender == "" { gen_match = 1; }
+            if cat_match == 0 { continue; }
+            if gen_match == 0 { continue; }
+            score = this.score_product(p);
+            scored.append({"product": p, "score": score});
+        }
+        // Sort by score descending (bubble sort)
+        scored = this.sort_by_score(scored);
+        result = [];
+        j = 0;
+        while j < len(scored) {
+            if j >= limit { break; }
+            result.append(scored[j]["product"]);
+            j = j + 1;
+        }
+        return result;
+    }
+
+    // PDP recommendations: similar products
+    def recommend_pdp(products, target_product, limit) {
+        scored = [];
+        i = 0;
+        while i < len(products) {
+            p = products[i];
+            i = i + 1;
+            if p["id"] == target_product["id"] { continue; }
+            sim = this.similarity(p, target_product);
+            if sim > 0.0 {
+                scored.append({"product": p, "score": sim});
+            }
+        }
+        scored = this.sort_by_score(scored);
+        result = [];
+        j = 0;
+        while j < len(scored) {
+            if j >= limit { break; }
+            result.append(scored[j]["product"]);
+            j = j + 1;
+        }
+        return result;
+    }
+
+    def score_product(p) {
+        rating_norm   = p["rating"] / 5.0;
+        trending_flag = 0;
+        if p["isTrending"] == true { trending_flag = 1; }
+        new_flag = 0;
+        if p["isNew"] == true { new_flag = 1; }
+        discount_norm = p["discount"] / 100.0;
+        sales_norm    = p["reviewCount"] / 1000.0;
+        if sales_norm > 1.0 { sales_norm = 1.0; }
+        score = (rating_norm * this.w_rating)
+              + (trending_flag * this.w_trending)
+              + (sales_norm * this.w_sales)
+              + (new_flag * this.w_new)
+              + (discount_norm * this.w_discount);
+        return score;
+    }
+
+    def similarity(p, target) {
+        score = 0.0;
+        if p["category"] == target["category"] { score = score + 0.4; }
+        if p["gender"] == target["gender"]     { score = score + 0.2; }
+        if p["brand"] == target["brand"]       { score = score + 0.2; }
+        // price proximity: within 30% -> boost
+        diff = p["price"] - target["price"];
+        if diff < 0 { diff = diff * -1; }
+        price_ratio = diff / target["price"];
+        if price_ratio < 0.3 { score = score + 0.2; }
+        return score;
+    }
+
+    def sort_by_score(scored) {
+        n = len(scored);
+        i = 0;
+        while i < n {
+            j = 0;
+            while j < n - i - 1 {
+                if scored[j]["score"] < scored[j+1]["score"] {
+                    tmp = scored[j];
+                    scored[j] = scored[j+1];
+                    scored[j+1] = tmp;
+                }
+                j = j + 1;
+            }
+            i = i + 1;
+        }
+        return scored;
+    }
+}
+
+// ─── Global State ─────────────────────────────────────────────
+
+rec_engine = RecommendationEngine();
+
+// In-memory carts: { sessionId -> [CartItem dict, ...] }
+carts = {};
+
+// In-memory sessions: { sessionId -> userInfo dict }
+sessions = {};
+
+// Global order counter
+order_counter = 1000;
+
+// ─── Database Initialization ──────────────────────────────────
+
+def init_db() {
+    db_connect("sqlite://ecommerce.db");
+
+    // Users table
+    db_exec("CREATE TABLE IF NOT EXISTS users (
+        id TEXT PRIMARY KEY,
+        email TEXT UNIQUE NOT NULL,
+        name TEXT NOT NULL,
+        phone TEXT,
+        password_hash TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )", []);
+
+    // Products table (master catalog)
+    db_exec("CREATE TABLE IF NOT EXISTS products (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        brand TEXT,
+        category TEXT,
+        subcategory TEXT,
+        price REAL,
+        original_price REAL,
+        discount INTEGER,
+        image_url TEXT,
+        description TEXT,
+        stock INTEGER DEFAULT 0,
+        rating REAL DEFAULT 0,
+        review_count INTEGER DEFAULT 0,
+        is_trending INTEGER DEFAULT 0,
+        is_new INTEGER DEFAULT 0,
+        gender TEXT,
+        sizes TEXT,
+        colors TEXT,
+        tags TEXT
+    )", []);
+
+    // Orders table
+    db_exec("CREATE TABLE IF NOT EXISTS orders (
+        id TEXT PRIMARY KEY,
+        user_id TEXT,
+        session_id TEXT,
+        total REAL,
+        status TEXT DEFAULT 'CONFIRMED',
+        address TEXT,
+        payment_method TEXT,
+        estimated_delivery TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )", []);
+
+    // Order items table
+    db_exec("CREATE TABLE IF NOT EXISTS order_items (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        order_id TEXT,
+        product_id TEXT,
+        name TEXT,
+        price REAL,
+        quantity INTEGER,
+        size TEXT,
+        color TEXT,
+        image_url TEXT
+    )", []);
+
+    // Reviews table
+    db_exec("CREATE TABLE IF NOT EXISTS reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        product_id TEXT,
+        user_id TEXT,
+        user_name TEXT,
+        rating REAL,
+        comment TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )", []);
+
+    // Wishlist
+    db_exec("CREATE TABLE IF NOT EXISTS wishlist (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id TEXT,
+        product_id TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP
+    )", []);
+
+    print("Database initialized");
+}
+
+// ─── Seed 100 Fashion Products ────────────────────────────────
+
+def seed_products() {
+    check = db_query("SELECT COUNT(*) as cnt FROM products", []);
+    if len(check) > 0 {
+        if check[0]["cnt"] > 0 { return; }
+    }
+
+    products_data = [
+        // Women's Dresses
+        ["P001","Floral Wrap Midi Dress","ZARA","Dresses","Midi",899.0,1499.0,"https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=400","Elegant floral print wrap dress","XS,S,M,L,XL","Pink,Blue,White",45,4.6,328,true,false,"women","summer,floral,trending"],
+        ["P002","Bodycon Mini Dress","H&M","Dresses","Mini",599.0,799.0,"https://images.unsplash.com/photo-1572804013309-59a88b7e92f1?w=400","Sleek bodycon silhouette","XS,S,M,L","Black,Red,Nude",62,4.3,195,false,true,"women","party,bodycon,new"],
+        ["P003","Boho Maxi Dress","Free People","Dresses","Maxi",1299.0,1999.0,"https://images.unsplash.com/photo-1496747611176-843222e1e57c?w=400","Bohemian maxi with tassel detail","S,M,L","Rust,Teal,Ivory",28,4.8,412,true,false,"women","boho,maxi,floral"],
+        ["P004","Slip Satin Dress","Shein","Dresses","Mini",349.0,549.0,"https://images.unsplash.com/photo-1551803091-e20673f15770?w=400","Silky satin slip dress","XS,S,M,L,XL","Champagne,Black,Emerald",88,4.1,267,false,true,"women","satin,slip,party"],
+        ["P005","Linen Shirt Dress","Mango","Dresses","Midi",749.0,999.0,"https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=400","Casual linen blend shirt dress","S,M,L,XL","White,Beige,Blue",53,4.5,183,false,false,"women","casual,linen,comfortable"],
+        // Women's Tops
+        ["P006","Crop Knit Top","Zara","Tops","Crop",449.0,649.0,"https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=400","Ribbed crop knit top","XS,S,M,L","Cream,Black,Pink",120,4.4,522,true,false,"women","crop,knit,casual"],
+        ["P007","Off-Shoulder Blouse","H&M","Tops","Blouse",399.0,599.0,"https://images.unsplash.com/photo-1554568218-0f1715e72254?w=400","Flowy off-shoulder blouse","XS,S,M,L,XL","White,Yellow,Lilac",75,4.2,314,false,true,"women","blouse,summer,trendy"],
+        ["P008","Graphic Oversized Tee","Shein","Tops","T-Shirt",299.0,399.0,"https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400","Oversized graphic tee","S,M,L,XL,XXL","White,Black,Grey",200,4.0,876,true,false,"women","casual,graphic,oversized"],
+        ["P009","Corset Bustier Top","Pretty Little Thing","Tops","Bustier",549.0,799.0,"https://images.unsplash.com/photo-1586790170083-2f9ceadc732d?w=400","Boned corset bustier","XS,S,M,L","Black,White,Red",40,4.6,198,true,true,"women","corset,party,trendy"],
+        ["P010","Silk Button-Down","Equipment","Tops","Blouse",1499.0,2199.0,"https://images.unsplash.com/photo-1562157873-818bc0726f68?w=400","Luxury silk button-down shirt","XS,S,M,L,XL","Ivory,Navy,Blush",22,4.9,143,false,false,"women","silk,luxury,office"],
+        // Women's Bottoms
+        ["P011","High-Waist Skinny Jeans","Levi's","Bottoms","Jeans",1299.0,1799.0,"https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=400","Classic high-waist skinny jeans","24,26,28,30,32","Blue,Black,White",95,4.7,687,true,false,"women","jeans,classic,denim"],
+        ["P012","Wide Leg Trousers","Zara","Bottoms","Trousers",899.0,1199.0,"https://images.unsplash.com/photo-1594938298603-c8148c4b4357?w=400","Flowy wide-leg trousers","XS,S,M,L,XL","Camel,Black,Green",67,4.5,321,false,true,"women","trousers,wide-leg,office"],
+        ["P013","Mini Pleated Skirt","H&M","Bottoms","Skirt",499.0,699.0,"https://images.unsplash.com/photo-1583496661160-fb5886a773d9?w=400","Tennis-style mini pleated skirt","XS,S,M,L","Pink,Black,White",110,4.3,445,true,false,"women","skirt,mini,casual"],
+        ["P014","Cargo Wide Pants","Shein","Bottoms","Cargo",649.0,899.0,"https://images.unsplash.com/photo-1598554747436-c9293d6a588f?w=400","Trendy cargo wide-leg pants","S,M,L,XL","Khaki,Black,Grey",82,4.1,289,false,true,"women","cargo,wide-leg,street"],
+        ["P015","Leather Mini Skirt","Mango","Bottoms","Skirt",799.0,1099.0,"https://images.unsplash.com/photo-1617137984095-74e4e5e3613f?w=400","Faux leather mini skirt","XS,S,M,L","Black,Brown","60",4.6,376,true,false,"women","leather,mini,party"],
+        // Men's Tops
+        ["P016","Classic White Oxford","Ralph Lauren","Tops","Shirt",1999.0,2999.0,"https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=400","Premium cotton Oxford shirt","S,M,L,XL,XXL","White,Blue,Pink",55,4.8,234,false,false,"men","oxford,classic,office"],
+        ["P017","Graphic Streetwear Tee","Supreme","Tops","T-Shirt",1499.0,1999.0,"https://images.unsplash.com/photo-1523381294911-8d3cead13475?w=400","Limited edition graphic tee","S,M,L,XL","White,Black","40",4.7,567,true,false,"men","streetwear,graphic,hype"],
+        ["P018","Linen Summer Shirt","Massimo Dutti","Tops","Shirt",1199.0,1599.0,"https://images.unsplash.com/photo-1596755094514-f87e34085b2c?w=400","Breathable linen summer shirt","S,M,L,XL","White,Beige,Blue",70,4.5,189,false,true,"men","linen,summer,casual"],
+        ["P019","Polo Shirt","Lacoste","Tops","Polo",1799.0,2499.0,"https://images.unsplash.com/photo-1571945153237-4929e783af4a?w=400","Classic pique polo shirt","S,M,L,XL,XXL","Navy,White,Green,Red",90,4.6,412,false,false,"men","polo,classic,sports"],
+        ["P020","Oversized Hoodie","Off-White","Tops","Hoodie",3999.0,5999.0,"https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=400","Luxury oversized hoodie","S,M,L,XL","Grey,Black,White",25,4.9,198,true,false,"men","hoodie,luxury,streetwear"],
+        // Men's Bottoms
+        ["P021","Slim Fit Chinos","GAP","Bottoms","Chinos",999.0,1499.0,"https://images.unsplash.com/photo-1473966968600-fa801b869a1a?w=400","Classic slim-fit chinos","28,30,32,34,36","Khaki,Navy,Grey",85,4.4,342,false,false,"men","chinos,office,casual"],
+        ["P022","Distressed Jeans","Diesel","Bottoms","Jeans",2499.0,3499.0,"https://images.unsplash.com/photo-1542272604-787c3835535d?w=400","Premium distressed jeans","28,30,32,34","Blue,Black",48,4.7,276,true,false,"men","jeans,distressed,premium"],
+        ["P023","Track Pants","Nike","Bottoms","Activewear",1299.0,1799.0,"https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400","Lightweight track pants","S,M,L,XL,XXL","Black,Navy,Grey",130,4.5,521,false,true,"men","activewear,track,sports"],
+        ["P024","Linen Shorts","H&M","Bottoms","Shorts",699.0,999.0,"https://images.unsplash.com/photo-1591195853828-11db59a44f43?w=400","Casual linen shorts","S,M,L,XL","Beige,White,Navy",95,4.2,198,false,true,"men","shorts,summer,casual"],
+        ["P025","Cargo Pants","Carhartt","Bottoms","Cargo",1799.0,2299.0,"https://images.unsplash.com/photo-1594938298603-c8148c4b4357?w=400","Heavy-duty cargo pants","30,32,34,36","Olive,Black,Brown",62,4.6,334,true,false,"men","cargo,utility,streetwear"],
+        // Footwear — Women
+        ["P026","Block Heel Sandals","Steve Madden","Footwear","Heels",1499.0,2199.0,"https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=400","Strappy block heel sandals","5,6,7,8,9,10","Nude,Black,White",38,4.5,287,true,false,"women","heels,sandals,party"],
+        ["P027","White Sneakers","Adidas","Footwear","Sneakers",3499.0,4999.0,"https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=400","Classic white leather sneakers","5,6,7,8,9","White,Black",95,4.8,876,true,false,"women","sneakers,classic,casual"],
+        ["P028","Platform Boots","Dr. Martens","Footwear","Boots",5999.0,7999.0,"https://images.unsplash.com/photo-1605812860427-4024433a70fd?w=400","Chunky platform ankle boots","5,6,7,8","Black,Cherry Red",28,4.9,312,true,false,"women","boots,platform,edgy"],
+        ["P029","Ballet Flats","Repetto","Footwear","Flats",2999.0,3999.0,"https://images.unsplash.com/photo-1560769629-975ec94e6a86?w=400","Classic leather ballet flats","5,6,7,8,9","Black,Nude,Red",45,4.7,198,false,false,"women","flats,classic,elegant"],
+        ["P030","Chunky Loafers","Gucci","Footwear","Loafers",8999.0,11999.0,"https://images.unsplash.com/photo-1516478177764-9fe5bd7e9717?w=400","Designer chunky loafers","5,6,7,8","Black,Brown",15,4.9,87,true,false,"women","loafers,luxury,trendy"],
+        // Footwear — Men
+        ["P031","Air Max Sneakers","Nike","Footwear","Sneakers",8999.0,11999.0,"https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400","Iconic Air Max running shoes","7,8,9,10,11,12","White/Black,Black/Red,Grey",75,4.8,943,true,false,"men","sneakers,running,iconic"],
+        ["P032","Chelsea Boots","Clarks","Footwear","Boots",3999.0,5499.0,"https://images.unsplash.com/photo-1638247025967-b4e38f787b76?w=400","Premium leather Chelsea boots","7,8,9,10,11","Black,Brown,Tan",42,4.7,289,false,false,"men","boots,chelsea,formal"],
+        ["P033","Slip-On Loafers","Gucci","Footwear","Loafers",12999.0,16999.0,"https://images.unsplash.com/photo-1531310197839-ccf54634509e?w=400","Horsebit slip-on loafers","7,8,9,10","Black,Brown",8,5.0,145,true,false,"men","loafers,luxury,formal"],
+        ["P034","Hiking Boots","Timberland","Footwear","Boots",6999.0,8999.0,"https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400","Waterproof hiking boots","7,8,9,10,11","Wheat,Black",55,4.6,412,false,true,"men","boots,hiking,outdoor"],
+        ["P035","Slides","Birkenstock","Footwear","Slides",2499.0,3499.0,"https://images.unsplash.com/photo-1591195853828-11db59a44f43?w=400","Iconic Arizona slides","7,8,9,10,11","Cork,Black,White",110,4.5,678,false,false,"men","slides,comfortable,casual"],
+        // Bags
+        ["P036","Mini Crossbody Bag","Coach","Bags","Crossbody",8999.0,12999.0,"https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400","Leather mini crossbody","One Size","Black,Tan,Red",18,4.8,234,true,false,"women","bag,crossbody,luxury"],
+        ["P037","Canvas Tote","Toteme","Bags","Tote",3499.0,4999.0,"https://images.unsplash.com/photo-1594938298603-c8148c4b4357?w=400","Sturdy canvas tote bag","One Size","Natural,Black,Olive",55,4.4,312,false,true,"women","tote,casual,sustainable"],
+        ["P038","Mini Backpack","Fjallraven","Bags","Backpack",4999.0,6499.0,"https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400","Classic Kanken mini backpack","One Size","Forest Green,Red,Blue,Yellow",40,4.7,512,true,false,"unisex","backpack,classic,outdoor"],
+        ["P039","Baguette Bag","Fendi","Bags","Baguette",24999.0,34999.0,"https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400","Iconic Fendi baguette","One Size","Black,Beige FF",5,5.0,67,true,false,"women","bag,luxury,iconic"],
+        ["P040","Gym Duffel","Nike","Bags","Duffel",2999.0,3999.0,"https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400","Spacious gym duffel bag","One Size","Black,Navy,Grey",80,4.5,445,false,true,"unisex","bag,gym,sports"],
+        // Accessories
+        ["P041","Oversized Sunglasses","Ray-Ban","Accessories","Sunglasses",5999.0,7999.0,"https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400","Classic Wayfarer sunglasses","One Size","Black,Tortoise,Clear",65,4.8,567,true,false,"unisex","sunglasses,classic,uv400"],
+        ["P042","Gold Hoop Earrings","Mejuri","Accessories","Jewelry",1499.0,1999.0,"https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400","14K gold fill hoops","One Size","Gold",90,4.9,423,true,false,"women","jewelry,gold,minimal"],
+        ["P043","Silk Scarf","Hermes","Accessories","Scarf",8999.0,12999.0,"https://images.unsplash.com/photo-1584030373081-f37b7bb4fa8e?w=400","Classic silk twill scarf","One Size","Multicolor",12,5.0,98,false,false,"women","scarf,silk,luxury"],
+        ["P044","Leather Belt","Gucci","Accessories","Belt",7999.0,10999.0,"https://images.unsplash.com/photo-1624222247344-550fb60583dc?w=400","GG buckle leather belt","S,M,L","Black,Brown",25,4.8,312,true,false,"unisex","belt,luxury,designer"],
+        ["P045","Bucket Hat","New Era","Accessories","Hat",999.0,1499.0,"https://images.unsplash.com/photo-1521369909029-2afed882baee?w=400","Trendy bucket hat","S/M,L/XL","Black,White,Pink,Beige",120,4.3,289,false,true,"unisex","hat,bucket,street"],
+        // Outerwear
+        ["P046","Trench Coat","Burberry","Outerwear","Trench",24999.0,34999.0,"https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=400","Iconic cotton gabardine trench","XS,S,M,L,XL","Honey,Black,Navy",10,5.0,187,true,false,"women","trench,iconic,luxury"],
+        ["P047","Puffer Jacket","Moncler","Outerwear","Puffer",39999.0,54999.0,"https://images.unsplash.com/photo-1544923246-77307dd654cb?w=400","Down-filled puffer jacket","XS,S,M,L","Black,Red,White",8,4.9,134,true,false,"unisex","puffer,down,luxury"],
+        ["P048","Denim Jacket","Levi's","Outerwear","Jacket",2499.0,3499.0,"https://images.unsplash.com/photo-1551537482-f2075a1d41f2?w=400","Classic trucker denim jacket","XS,S,M,L,XL","Blue,Black,White",75,4.6,534,false,false,"unisex","denim,classic,casual"],
+        ["P049","Leather Moto Jacket","AllSaints","Outerwear","Jacket",9999.0,13999.0,"https://images.unsplash.com/photo-1520975954732-35dd22299614?w=400","Butter-soft leather moto jacket","XS,S,M,L","Black,Brown",22,4.8,267,true,false,"women","leather,moto,edgy"],
+        ["P050","Blazer","Massimo Dutti","Outerwear","Blazer",3999.0,5499.0,"https://images.unsplash.com/photo-1593030761757-71fae45fa0e7?w=400","Structured suit blazer","XS,S,M,L,XL","Black,Grey,Camel",50,4.7,312,false,true,"women","blazer,office,structured"],
+        // Activewear
+        ["P051","Yoga Leggings","Lululemon","Activewear","Leggings",4999.0,6999.0,"https://images.unsplash.com/photo-1506629082955-511b1aa562c8?w=400","High-waist Align leggings","XS,S,M,L,XL","Black,Grey,Blue,Pink",120,4.9,1245,true,false,"women","yoga,leggings,activewear"],
+        ["P052","Sports Bra","Lululemon","Activewear","Sports Bra",2999.0,3999.0,"https://images.unsplash.com/photo-1518459031867-a89b944bffe4?w=400","Medium support sports bra","XS,S,M,L","Black,White,Blue,Pink",150,4.7,876,true,false,"women","sports,bra,activewear"],
+        ["P053","Running Shorts","Nike","Activewear","Shorts",1499.0,1999.0,"https://images.unsplash.com/photo-1542291026-7eec264c27ff?w=400","Lightweight 2-in-1 running shorts","S,M,L,XL","Black,Navy,Red",200,4.5,654,false,true,"men","shorts,running,sports"],
+        ["P054","Training Jacket","Adidas","Activewear","Jacket",2999.0,3999.0,"https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=400","Lightweight training jacket","S,M,L,XL","Black,Blue,Grey",85,4.4,421,false,false,"unisex","jacket,training,sports"],
+        ["P055","Compression Tights","Under Armour","Activewear","Tights",1999.0,2799.0,"https://images.unsplash.com/photo-1506629082955-511b1aa562c8?w=400","HeatGear compression tights","S,M,L,XL","Black,Grey",110,4.6,387,false,true,"men","tights,compression,sports"],
+        // Swimwear
+        ["P056","One-Piece Swimsuit","Triangl","Swimwear","One-Piece",3999.0,5499.0,"https://images.unsplash.com/photo-1570976447640-ac859083963f?w=400","Neoprene one-piece swimsuit","XS,S,M,L","Black,Pink,Blue",35,4.7,234,true,false,"women","swimwear,one-piece,beach"],
+        ["P057","Bikini Set","Vix","Swimwear","Bikini",2499.0,3499.0,"https://images.unsplash.com/photo-1571019613454-1cb2f99b2d8b?w=400","Tropical print bikini set","XS,S,M,L","Tropical,White,Black",48,4.5,312,false,true,"women","bikini,tropical,beach"],
+        ["P058","Swim Trunks","Vilebrequin","Swimwear","Trunks",2999.0,3999.0,"https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400","Luxury print swim trunks","S,M,L,XL","Navy,Green,Orange",30,4.8,145,true,false,"men","swim,trunks,beach"],
+        // Sleepwear & Loungewear
+        ["P059","Silk Pajama Set","Eberjey","Sleepwear","Pajamas",4999.0,6499.0,"https://images.unsplash.com/photo-1567401893414-76b7b1e5a7a5?w=400","Luxury silk pajama set","XS,S,M,L","Ivory,Pink,Blue",22,4.9,167,true,false,"women","pajamas,silk,luxury"],
+        ["P060","Cozy Lounge Set","Skims","Sleepwear","Lounge Set",3499.0,4999.0,"https://images.unsplash.com/photo-1503342394128-c104d54dba01?w=400","Ultra-cozy lounge set","XS,S,M,L,XL","Stone,Black,Pink",65,4.8,478,true,false,"women","lounge,cozy,comfortable"],
+        // Kurtas & Ethnic Wear
+        ["P061","Cotton Anarkali Kurti","Biba","Ethnic","Anarkali",1499.0,1999.0,"https://images.unsplash.com/photo-1583391733981-8498408ee4b6?w=400","Printed cotton Anarkali kurti","XS,S,M,L,XL,XXL","Blue,Pink,Yellow",85,4.5,312,false,true,"women","ethnic,kurti,anarkali"],
+        ["P062","Men's Kurta","Manyavar","Ethnic","Kurta",2999.0,3999.0,"https://images.unsplash.com/photo-1584466977773-e625c37cdd50?w=400","Embroidered silk kurta","S,M,L,XL,XXL","White,Blue,Golden",42,4.7,198,false,false,"men","ethnic,kurta,festive"],
+        ["P063","Lehenga Choli","Sabyasachi","Ethnic","Lehenga",49999.0,69999.0,"https://images.unsplash.com/photo-1583391733981-8498408ee4b6?w=400","Bridal embroidered lehenga","S,M,L","Red,Pink,Gold",3,5.0,45,true,false,"women","ethnic,lehenga,bridal"],
+        ["P064","Nehru Jacket","Manyavar","Ethnic","Jacket",3499.0,4999.0,"https://images.unsplash.com/photo-1584466977773-e625c37cdd50?w=400","Embroidered Nehru jacket","S,M,L,XL","Navy,Black,Maroon",28,4.6,134,false,true,"men","ethnic,nehru,festive"],
+        // Denim Specials
+        ["P065","Barrel Fit Jeans","Agolde","Bottoms","Jeans",5999.0,7999.0,"https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=400","On-trend barrel fit jeans","24,25,26,27,28,29,30","Light Blue,Dark Blue",32,4.8,223,true,true,"women","jeans,barrel,trending"],
+        ["P066","90s Loose Jeans","Weekday","Bottoms","Jeans",2499.0,3299.0,"https://images.unsplash.com/photo-1542272604-787c3835535d?w=400","Relaxed 90s style jeans","26,28,30,32","Blue,Black",55,4.5,312,true,false,"unisex","jeans,90s,relaxed"],
+        // Tech & Functional
+        ["P067","Anti-Gravity Leggings","CRZ Yoga","Activewear","Leggings",2499.0,3299.0,"https://images.unsplash.com/photo-1506629082955-511b1aa562c8?w=400","Naked feel yoga leggings","XS,S,M,L","Black,Grey,Navy",150,4.6,654,false,true,"women","yoga,leggings,technical"],
+        ["P068","4-Way Stretch Pants","Outlier","Bottoms","Trousers",6999.0,8999.0,"https://images.unsplash.com/photo-1594938298603-c8148c4b4357?w=400","Technical 4-way stretch trousers","28,30,32,34","Black,Navy",25,4.8,167,false,false,"men","technical,pants,travel"],
+        // Kids
+        ["P069","Floral Playsuit","Zara Kids","Kids","Playsuit",999.0,1499.0,"https://images.unsplash.com/photo-1471286174890-9c112ffca5b4?w=400","Cute floral playsuit","2-3Y,4-5Y,6-7Y,8-9Y","Pink,Yellow",65,4.7,198,false,true,"kids","kids,playsuit,cute"],
+        ["P070","Kids Graphic Tee","H&M Kids","Kids","T-Shirt",399.0,599.0,"https://images.unsplash.com/photo-1515372039744-b8f02a3ae446?w=400","Fun graphic tee for kids","2Y,4Y,6Y,8Y,10Y","White,Blue,Red",120,4.3,267,false,false,"kids","kids,tshirt,casual"],
+        // Additional trending
+        ["P071","Y2K Butterfly Top","Shein","Tops","Crop",399.0,599.0,"https://images.unsplash.com/photo-1523381210434-271e8be1f52b?w=400","Y2K butterfly print crop top","XS,S,M,L","Pink,Blue,Silver",180,4.2,445,true,false,"women","y2k,butterfly,trendy"],
+        ["P072","Crochet Beach Cover","Mango","Swimwear","Cover-Up",1499.0,1999.0,"https://images.unsplash.com/photo-1570976447640-ac859083963f?w=400","Handmade crochet beach cover","S/M,L/XL","White,Cream",35,4.6,198,true,true,"women","beach,crochet,summer"],
+        ["P073","Statement Blazer","Zara","Outerwear","Blazer",2999.0,3999.0,"https://images.unsplash.com/photo-1593030761757-71fae45fa0e7?w=400","Oversized check blazer","XS,S,M,L","Black/White Check,Camel",40,4.7,276,true,true,"women","blazer,check,statement"],
+        ["P074","Biker Shorts","Skims","Bottoms","Shorts",1299.0,1799.0,"https://images.unsplash.com/photo-1583496661160-fb5886a773d9?w=400","Sculpting biker shorts","XS,S,M,L,XL","Black,Brown,Tan",200,4.8,876,true,false,"women","biker,shorts,sculpting"],
+        ["P075","Tie-Dye Hoodie","ASOS","Tops","Hoodie",1299.0,1799.0,"https://images.unsplash.com/photo-1556821840-3a63f15732ce?w=400","Relaxed tie-dye hoodie","XS,S,M,L,XL","Purple/Blue,Pink/Orange",65,4.4,312,false,true,"unisex","hoodie,tiedye,colorful"],
+        ["P076","Mom Jeans","Levi's","Bottoms","Jeans",2299.0,2999.0,"https://images.unsplash.com/photo-1541099649105-f69ad21f3246?w=400","High-waist mom jeans","24,26,28,30,32","Light Blue,Acid Wash",88,4.6,654,false,false,"women","jeans,mom,vintage"],
+        ["P077","Organza Midi Skirt","Zara","Bottoms","Skirt",1299.0,1799.0,"https://images.unsplash.com/photo-1583496661160-fb5886a773d9?w=400","Dreamy organza midi skirt","XS,S,M,L","White,Pink,Blue",22,4.8,198,true,true,"women","skirt,organza,dreamy"],
+        ["P078","Utility Vest","Carhartt","Tops","Vest",2499.0,3299.0,"https://images.unsplash.com/photo-1586790170083-2f9ceadc732d?w=400","Multi-pocket utility vest","S,M,L,XL","Olive,Black","45",4.5,234,false,true,"unisex","vest,utility,functional"],
+        ["P079","Mesh Ballet Flats","Miu Miu","Footwear","Flats",12999.0,16999.0,"https://images.unsplash.com/photo-1560769629-975ec94e6a86?w=400","Sheer mesh ballet flats","5,6,7,8","Black,Ivory",10,4.9,78,true,false,"women","flats,mesh,luxury"],
+        ["P080","Slingback Kitten Heels","Zara","Footwear","Heels",1999.0,2799.0,"https://images.unsplash.com/photo-1543163521-1bf539c55dd2?w=400","Classic slingback kitten heels","5,6,7,8,9","Black,Camel,White",42,4.6,312,false,true,"women","heels,kitten,classic"],
+        // More men's
+        ["P081","Boardshorts","Vans","Swimwear","Boardshorts",1499.0,1999.0,"https://images.unsplash.com/photo-1512374382149-233c42b6a83b?w=400","Classic checkerboard boardshorts","S,M,L,XL","Checkerboard,Solid Black",65,4.4,312,false,false,"men","boardshorts,beach,vans"],
+        ["P082","Flannel Shirt","Pendleton","Tops","Shirt",2999.0,3999.0,"https://images.unsplash.com/photo-1602810318383-e386cc2a3ccf?w=400","Classic wool blend flannel","S,M,L,XL","Red/Black,Blue/Green",38,4.7,198,false,true,"men","flannel,wool,casual"],
+        ["P083","Puffer Vest","The North Face","Outerwear","Vest",3999.0,5499.0,"https://images.unsplash.com/photo-1544923246-77307dd654cb?w=400","Insulated puffer vest","S,M,L,XL,XXL","Black,Navy,Green",55,4.5,312,false,true,"men","vest,puffer,outdoor"],
+        ["P084","Desert Boots","Clarks","Footwear","Boots",3999.0,4999.0,"https://images.unsplash.com/photo-1638247025967-b4e38f787b76?w=400","Original suede desert boots","7,8,9,10,11","Sand,Brown,Black",48,4.8,534,false,false,"men","boots,desert,classic"],
+        ["P085","Satin Bomber Jacket","H&M","Outerwear","Jacket",1799.0,2499.0,"https://images.unsplash.com/photo-1520975954732-35dd22299614?w=400","Shiny satin bomber jacket","XS,S,M,L,XL","Black,Green,Pink",72,4.3,289,true,false,"unisex","bomber,satin,street"],
+        // More accessories
+        ["P086","Pearl Hair Clips","ASOS","Accessories","Hair",299.0,449.0,"https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400","Set of 3 pearl hair clips","One Size","White,Pink",200,4.4,567,true,false,"women","hair,pearl,cute"],
+        ["P087","Signet Ring","Maria Tash","Accessories","Jewelry",2999.0,3999.0,"https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400","Gold signet ring","5,6,7,8","Gold,Silver",30,4.7,198,false,true,"unisex","ring,signet,jewelry"],
+        ["P088","Beaded Necklace","Anni Lu","Accessories","Jewelry",2499.0,3299.0,"https://images.unsplash.com/photo-1515562141207-7a88fb7ce338?w=400","Colorful beaded necklace","One Size","Rainbow,Neutral,Ocean",45,4.6,312,true,false,"women","necklace,beaded,colorful"],
+        ["P089","Cap Toe Beret","Sandro","Accessories","Hat",1499.0,1999.0,"https://images.unsplash.com/photo-1521369909029-2afed882baee?w=400","Classic French beret","One Size","Black,Camel,Wine",35,4.5,134,false,true,"women","beret,french,elegant"],
+        ["P090","Leather Gloves","Coach","Accessories","Gloves",2499.0,3499.0,"https://images.unsplash.com/photo-1584030373081-f37b7bb4fa8e?w=400","Cashmere-lined leather gloves","S,M,L","Black,Brown",18,4.8,98,false,false,"unisex","gloves,leather,winter"],
+        // Final 10 — diverse and trendy
+        ["P091","Color Block Sweater","COS","Tops","Sweater",2499.0,3299.0,"https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400","Geometric color block sweater","XS,S,M,L,XL","Blue/Orange,Pink/Green",42,4.6,234,true,true,"unisex","sweater,colorblock,art"],
+        ["P092","Ribbed Bodysuit","Skims","Tops","Bodysuit",1499.0,1999.0,"https://images.unsplash.com/photo-1586790170083-2f9ceadc732d?w=400","Sculpting ribbed bodysuit","XS,S,M,L,XL","Cocoa,Onyx,Pink Clay",130,4.8,678,true,false,"women","bodysuit,ribbed,sculpting"],
+        ["P093","Wide Brim Hat","Lack of Color","Accessories","Hat",3499.0,4999.0,"https://images.unsplash.com/photo-1521369909029-2afed882baee?w=400","Felt wide-brim hat","S/M,L/XL","Black,Camel,Ivory",25,4.9,198,true,false,"women","hat,widebrim,elegant"],
+        ["P094","Leather Mini Bag","Polene","Bags","Mini Bag",6999.0,9499.0,"https://images.unsplash.com/photo-1548036328-c9fa89d128fa?w=400","Structured leather mini bag","One Size","Black,Caramel,Cream",18,4.9,245,true,false,"women","bag,mini,structured"],
+        ["P095","Oversized Cardigan","Toteme","Tops","Cardigan",3499.0,4799.0,"https://images.unsplash.com/photo-1576566588028-4147f3842f27?w=400","Chunky oversized cardigan","XS,S,M,L","Oat,Brown,Grey",50,4.7,312,false,true,"women","cardigan,chunky,cozy"],
+        ["P096","Velvet Blazer","Sandro","Outerwear","Blazer",5999.0,7999.0,"https://images.unsplash.com/photo-1593030761757-71fae45fa0e7?w=400","Rich velvet blazer","XS,S,M,L","Emerald,Bordeaux,Black",15,4.8,145,true,false,"unisex","blazer,velvet,luxe"],
+        ["P097","Linen Co-Ord Set","Mango","Tops","Co-Ord",2499.0,3299.0,"https://images.unsplash.com/photo-1490481651871-ab68de25d43d?w=400","Matching linen co-ord set","XS,S,M,L,XL","Sand,White,Green",38,4.6,198,true,true,"women","coord,linen,summer"],
+        ["P098","Dad Sneakers","New Balance","Footwear","Sneakers",8999.0,11999.0,"https://images.unsplash.com/photo-1551107696-a4b0c5a0d9a2?w=400","990v5 dad sneakers","6,7,8,9,10","Grey/Navy,White/Silver",65,4.9,876,true,false,"unisex","sneakers,dad,classic"],
+        ["P099","Sequin Mini Dress","Retrofete","Dresses","Mini",7999.0,10999.0,"https://images.unsplash.com/photo-1551803091-e20673f15770?w=400","Statement sequin mini dress","XS,S,M,L","Gold,Silver,Hot Pink",20,4.8,134,true,false,"women","dress,sequin,party"],
+        ["P100","Shearling Coat","Arket","Outerwear","Coat",14999.0,19999.0,"https://images.unsplash.com/photo-1539533018447-63fcce2678e3?w=400","Shearling trim wool coat","XS,S,M,L","Camel,Black",12,4.9,98,true,false,"women","coat,shearling,winter"]
+    ];
+
+    i = 0;
+    while i < len(products_data) {
+        p = products_data[i];
+        i = i + 1;
+        db_exec("INSERT OR IGNORE INTO products
+            (id,name,brand,category,subcategory,price,original_price,discount,
+             image_url,description,stock,rating,review_count,
+             is_trending,is_new,gender,sizes,colors,tags)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [p[0],p[1],p[2],p[3],p[4],p[5],p[6],
+             round((p[6]-p[5])/p[6]*100),
+             p[7],p[8],p[10],p[11],p[12],
+             p[13],p[14],p[15],p[9],
+             p[16],p[17]]);
+    }
+    print("Seeded 100 fashion products");
+}
+
+// ─── Helpers ──────────────────────────────────────────────────
+
+def load_products_from_db() {
+    rows = db_query("SELECT * FROM products ORDER BY is_trending DESC, rating DESC", []);
+    products = [];
+    j = 0;
+    while j < len(rows) {
+        r = rows[j];
+        j = j + 1;
+        p = {
+            "id":          r["id"],
+            "name":        r["name"],
+            "brand":       r["brand"],
+            "category":    r["category"],
+            "subcategory": r["subcategory"],
+            "price":       r["price"],
+            "originalPrice": r["original_price"],
+            "discount":    r["discount"],
+            "imageUrl":    r["image_url"],
+            "description": r["description"],
+            "stock":       r["stock"],
+            "rating":      r["rating"],
+            "reviewCount": r["review_count"],
+            "isTrending":  r["is_trending"] == 1,
+            "isNew":       r["is_new"] == 1,
+            "gender":      r["gender"],
+            "sizes":       split(r["sizes"], ","),
+            "colors":      split(r["colors"], ","),
+            "tags":        split(r["tags"], ","),
+            "available":   r["stock"] > 0
+        };
+        products.append(p);
+    }
+    return products;
+}
+
+def gen_order_id() {
+    order_counter = order_counter + 1;
+    return "ORD-" + str(order_counter);
+}
+
+def json_ok(data) {
+    return {"status": 200, "body": to_json(data), "content_type": "application/json"};
+}
+
+def json_err(code, msg) {
+    return {"status": code, "body": to_json({"error": msg}), "content_type": "application/json"};
+}
+
+def parse_int_param(val, default) {
+    if val == "" { return default; }
+    if val == null { return default; }
+    return int(val);
+}
+
+def get_query_param(query, key) {
+    if query == "" { return ""; }
+    if query == null { return ""; }
+    parts = split(query, "&");
+    i = 0;
+    while i < len(parts) {
+        kv = split(parts[i], "=");
+        i = i + 1;
+        if len(kv) >= 2 {
+            if kv[0] == key { return kv[1]; }
+        }
+    }
+    return "";
+}
+
+// ─── API Handlers ─────────────────────────────────────────────
+
+def handle_health(req) {
+    products = load_products_from_db();
+    categories = [];
+    seen_cats = {};
+    i = 0;
+    while i < len(products) {
+        cat = products[i]["category"];
+        i = i + 1;
+        if seen_cats[cat] != true {
+            seen_cats[cat] = true;
+            categories.append(cat);
+        }
+    }
+    return json_ok({
+        "status": "healthy",
+        "service": "SHYNX Fashion E-Commerce",
+        "version": "1.0.0",
+        "products": len(products),
+        "categories": len(categories),
+        "uptime": "running"
+    });
+}
+
+def handle_get_products(req) {
+    query = req["query"];
+    page      = parse_int_param(get_query_param(query, "page"), 1);
+    page_size = parse_int_param(get_query_param(query, "pageSize"), 24);
+    category  = get_query_param(query, "category");
+    gender    = get_query_param(query, "gender");
+    search    = get_query_param(query, "search");
+    min_price = get_query_param(query, "minPrice");
+    max_price = get_query_param(query, "maxPrice");
+    sort_by   = get_query_param(query, "sort");
+    trending  = get_query_param(query, "trending");
+    is_new    = get_query_param(query, "new");
+
+    all_products = load_products_from_db();
+
+    // Python-style filtering
+    filtered = [];
+    i = 0;
+    while i < len(all_products) {
+        p = all_products[i];
+        i = i + 1;
+        ok = true;
+        if category != "" {
+            if p["category"] != category { ok = false; }
+        }
+        if gender != "" {
+            if p["gender"] != gender {
+                if p["gender"] != "unisex" { ok = false; }
+            }
+        }
+        if search != "" {
+            name_lower  = lower(p["name"]);
+            brand_lower = lower(p["brand"]);
+            srch_lower  = lower(search);
+            found = false;
+            if contains(name_lower, srch_lower)  { found = true; }
+            if contains(brand_lower, srch_lower) { found = true; }
+            if found == false { ok = false; }
+        }
+        if min_price != "" {
+            mp = float(min_price);
+            if p["price"] < mp { ok = false; }
+        }
+        if max_price != "" {
+            mx = float(max_price);
+            if p["price"] > mx { ok = false; }
+        }
+        if trending == "true" {
+            if p["isTrending"] != true { ok = false; }
+        }
+        if is_new == "true" {
+            if p["isNew"] != true { ok = false; }
+        }
+        if ok { filtered.append(p); }
+    }
+
+    // Sorting
+    if sort_by == "price_asc" {
+        filtered = sort_products(filtered, "price", false);
+    }
+    if sort_by == "price_desc" {
+        filtered = sort_products(filtered, "price", true);
+    }
+    if sort_by == "rating" {
+        filtered = sort_products(filtered, "rating", true);
+    }
+    if sort_by == "newest" {
+        filtered = sort_newest(filtered);
+    }
+
+    total = len(filtered);
+    start = (page - 1) * page_size;
+    end   = start + page_size;
+    if end > total { end = total; }
+    page_items = [];
+    k = start;
+    while k < end {
+        page_items.append(filtered[k]);
+        k = k + 1;
+    }
+
+    return json_ok({
+        "products":   page_items,
+        "total":      total,
+        "page":       page,
+        "pageSize":   page_size,
+        "totalPages": ceil(total / page_size)
+    });
+}
+
+def sort_products(items, field, desc) {
+    n = len(items);
+    i = 0;
+    while i < n {
+        j = 0;
+        while j < n - i - 1 {
+            a = items[j][field];
+            b = items[j+1][field];
+            swap = false;
+            if desc == true  { if a < b { swap = true; } }
+            if desc == false { if a > b { swap = true; } }
+            if swap {
+                tmp = items[j];
+                items[j] = items[j+1];
+                items[j+1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return items;
+}
+
+def sort_newest(items) {
+    n = len(items);
+    i = 0;
+    while i < n {
+        j = 0;
+        while j < n - i - 1 {
+            a_new = 0;
+            b_new = 0;
+            if items[j]["isNew"] == true   { a_new = 1; }
+            if items[j+1]["isNew"] == true { b_new = 1; }
+            if a_new < b_new {
+                tmp = items[j];
+                items[j] = items[j+1];
+                items[j+1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return items;
+}
+
+def handle_get_product(req, product_id) {
+    // Try Redis cache first (Java-style: check resource, Python-style: dict access)
+    cached = redis_get("product:" + product_id);
+    if cached != null {
+        return {"status": 200, "body": cached, "content_type": "application/json"};
+    }
+
+    rows = db_query("SELECT * FROM products WHERE id = ?", [product_id]);
+    if len(rows) == 0 {
+        return json_err(404, "Product not found");
+    }
+    r = rows[0];
+    product = {
+        "id":          r["id"],
+        "name":        r["name"],
+        "brand":       r["brand"],
+        "category":    r["category"],
+        "subcategory": r["subcategory"],
+        "price":       r["price"],
+        "originalPrice": r["original_price"],
+        "discount":    r["discount"],
+        "imageUrl":    r["image_url"],
+        "description": r["description"],
+        "stock":       r["stock"],
+        "rating":      r["rating"],
+        "reviewCount": r["review_count"],
+        "isTrending":  r["is_trending"] == 1,
+        "isNew":       r["is_new"] == 1,
+        "gender":      r["gender"],
+        "sizes":       split(r["sizes"], ","),
+        "colors":      split(r["colors"], ","),
+        "tags":        split(r["tags"], ","),
+        "available":   r["stock"] > 0
+    };
+
+    // Get reviews
+    reviews = db_query("SELECT * FROM reviews WHERE product_id = ? ORDER BY created_at DESC LIMIT 10", [product_id]);
+
+    // Recommendations (PDP)
+    all_products = load_products_from_db();
+    similar = rec_engine.recommend_pdp(all_products, product, 6);
+
+    resp_body = to_json({
+        "product":         product,
+        "reviews":         reviews,
+        "recommendations": similar
+    });
+
+    // Cache for 5 min
+    redis_setex("product:" + product_id, 300, resp_body);
+
+    return {"status": 200, "body": resp_body, "content_type": "application/json"};
+}
+
+def handle_get_categories(req) {
+    all_products = load_products_from_db();
+    cats = {};
+    i = 0;
+    while i < len(all_products) {
+        p = all_products[i];
+        i = i + 1;
+        cat = p["category"];
+        if cats[cat] == null { cats[cat] = 0; }
+        cats[cat] = cats[cat] + 1;
+    }
+    result = [];
+    all_cats = ["Dresses","Tops","Bottoms","Footwear","Bags","Accessories","Outerwear","Activewear","Swimwear","Sleepwear","Ethnic","Kids"];
+    k = 0;
+    while k < len(all_cats) {
+        c = all_cats[k];
+        k = k + 1;
+        cnt = cats[c];
+        if cnt == null { cnt = 0; }
+        result.append({"name": c, "count": cnt});
+    }
+    return json_ok(result);
+}
+
+def handle_recommendations_plp(req) {
+    query    = req["query"];
+    category = get_query_param(query, "category");
+    gender   = get_query_param(query, "gender");
+    limit    = parse_int_param(get_query_param(query, "limit"), 12);
+
+    all_products = load_products_from_db();
+    recs = rec_engine.recommend_plp(all_products, category, gender, limit);
+    return json_ok({"recommendations": recs, "count": len(recs)});
+}
+
+def handle_recommendations_pdp(req, product_id) {
+    rows = db_query("SELECT * FROM products WHERE id = ?", [product_id]);
+    if len(rows) == 0 {
+        return json_err(404, "Product not found");
+    }
+    r = rows[0];
+    target = {
+        "id":       r["id"],
+        "category": r["category"],
+        "gender":   r["gender"],
+        "brand":    r["brand"],
+        "price":    r["price"]
+    };
+    limit = parse_int_param(get_query_param(req["query"], "limit"), 8);
+    all_products = load_products_from_db();
+    recs = rec_engine.recommend_pdp(all_products, target, limit);
+    return json_ok({"recommendations": recs, "count": len(recs)});
+}
+
+// ─── Cart Handlers ─────────────────────────────────────────────
+
+def handle_get_cart(req, session_id) {
+    if carts[session_id] == null {
+        return json_ok({"items": [], "total": 0.0, "itemCount": 0});
+    }
+    items = carts[session_id];
+    total = 0.0;
+    count = 0;
+    i = 0;
+    while i < len(items) {
+        total = total + items[i]["price"] * items[i]["quantity"];
+        count = count + items[i]["quantity"];
+        i = i + 1;
+    }
+    return json_ok({"items": items, "total": total, "itemCount": count});
+}
+
+def handle_add_to_cart(req, session_id) {
+    body = from_json(req["body"]);
+    product_id = body["productId"];
+    size       = body["size"];
+    color      = body["color"];
+    quantity   = body["quantity"];
+    if quantity == null { quantity = 1; }
+
+    rows = db_query("SELECT * FROM products WHERE id = ?", [product_id]);
+    if len(rows) == 0 {
+        return json_err(404, "Product not found");
+    }
+    r = rows[0];
+
+    if carts[session_id] == null {
+        carts[session_id] = [];
+    }
+    items = carts[session_id];
+
+    // Check if same product+size+color exists
+    found = false;
+    i = 0;
+    while i < len(items) {
+        it = items[i];
+        i = i + 1;
+        if it["productId"] == product_id {
+            if it["size"] == size {
+                if it["color"] == color {
+                    it["quantity"] = it["quantity"] + quantity;
+                    found = true;
+                }
+            }
+        }
+    }
+
+    if found == false {
+        new_item = {
+            "productId": product_id,
+            "name":      r["name"],
+            "price":     r["price"],
+            "size":      size,
+            "color":     color,
+            "quantity":  quantity,
+            "imageUrl":  r["image_url"],
+            "brand":     r["brand"]
+        };
+        carts[session_id].append(new_item);
+    }
+
+    // Kafka event
+    kafka_produce("cart-events", session_id, to_json({"event": "ITEM_ADDED", "productId": product_id, "sessionId": session_id}));
+
+    return handle_get_cart(req, session_id);
+}
+
+def handle_update_cart(req, session_id) {
+    body = from_json(req["body"]);
+    product_id = body["productId"];
+    size       = body["size"];
+    color      = body["color"];
+    quantity   = body["quantity"];
+
+    if carts[session_id] == null {
+        return json_err(400, "Cart not found");
+    }
+    new_items = [];
+    items = carts[session_id];
+    i = 0;
+    while i < len(items) {
+        it = items[i];
+        i = i + 1;
+        match = false;
+        if it["productId"] == product_id {
+            if it["size"] == size {
+                if it["color"] == color { match = true; }
+            }
+        }
+        if match == true {
+            if quantity > 0 {
+                it["quantity"] = quantity;
+                new_items.append(it);
+            }
+        } else {
+            new_items.append(it);
+        }
+    }
+    carts[session_id] = new_items;
+    return handle_get_cart(req, session_id);
+}
+
+def handle_clear_cart(req, session_id) {
+    carts[session_id] = [];
+    return json_ok({"message": "Cart cleared"});
+}
+
+// ─── Checkout & Orders ────────────────────────────────────────
+
+def handle_checkout(req, session_id) {
+    body = from_json(req["body"]);
+    address        = body["address"];
+    payment_method = body["paymentMethod"];
+    user_id        = body["userId"];
+    if user_id == null { user_id = session_id; }
+
+    if carts[session_id] == null {
+        return json_err(400, "Cart is empty");
+    }
+    items = carts[session_id];
+    if len(items) == 0 {
+        return json_err(400, "Cart is empty");
+    }
+
+    // Calculate total
+    total = 0.0;
+    i = 0;
+    while i < len(items) {
+        total = total + items[i]["price"] * items[i]["quantity"];
+        i = i + 1;
+    }
+
+    order_id = gen_order_id();
+    now = "2026-04-15";
+
+    // Save order
+    db_exec("INSERT INTO orders (id, user_id, session_id, total, status, address, payment_method, estimated_delivery)
+             VALUES (?, ?, ?, ?, 'CONFIRMED', ?, ?, '3-5 business days')",
+            [order_id, user_id, session_id, total, to_json(address), payment_method]);
+
+    // Save items
+    j = 0;
+    while j < len(items) {
+        it = items[j];
+        j = j + 1;
+        db_exec("INSERT INTO order_items (order_id, product_id, name, price, quantity, size, color, image_url)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [order_id, it["productId"], it["name"], it["price"],
+                 it["quantity"], it["size"], it["color"], it["imageUrl"]]);
+        // Update stock
+        db_exec("UPDATE products SET stock = stock - ? WHERE id = ?",
+                [it["quantity"], it["productId"]]);
+    }
+
+    // Kafka events for downstream services
+    kafka_produce("order-events", order_id, to_json({
+        "event":   "ORDER_PLACED",
+        "orderId": order_id,
+        "userId":  user_id,
+        "total":   total,
+        "items":   len(items)
+    }));
+    kafka_produce("payment-events", order_id, to_json({
+        "event":         "PAYMENT_REQUESTED",
+        "orderId":       order_id,
+        "amount":        total,
+        "paymentMethod": payment_method
+    }));
+
+    // Clear cart
+    carts[session_id] = [];
+
+    // Cache order in Redis
+    order_data = {
+        "id":               order_id,
+        "userId":           user_id,
+        "items":            items,
+        "total":            total,
+        "status":           "CONFIRMED",
+        "address":          address,
+        "paymentMethod":    payment_method,
+        "estimatedDelivery":"3-5 business days",
+        "createdAt":        now
+    };
+    redis_setex("order:" + order_id, 3600, to_json(order_data));
+
+    return json_ok(order_data);
+}
+
+def handle_get_order(req, order_id) {
+    cached = redis_get("order:" + order_id);
+    if cached != null {
+        return {"status": 200, "body": cached, "content_type": "application/json"};
+    }
+    rows = db_query("SELECT * FROM orders WHERE id = ?", [order_id]);
+    if len(rows) == 0 {
+        return json_err(404, "Order not found");
+    }
+    o = rows[0];
+    items = db_query("SELECT * FROM order_items WHERE order_id = ?", [order_id]);
+    return json_ok({
+        "id":               o["id"],
+        "userId":           o["user_id"],
+        "total":            o["total"],
+        "status":           o["status"],
+        "address":          from_json(o["address"]),
+        "paymentMethod":    o["payment_method"],
+        "estimatedDelivery":o["estimated_delivery"],
+        "createdAt":        o["created_at"],
+        "items":            items
+    });
+}
+
+def handle_get_orders(req, session_id) {
+    rows = db_query("SELECT * FROM orders WHERE session_id = ? ORDER BY created_at DESC", [session_id]);
+    orders = [];
+    i = 0;
+    while i < len(rows) {
+        o = rows[i];
+        i = i + 1;
+        items = db_query("SELECT * FROM order_items WHERE order_id = ?", [o["id"]]);
+        orders.append({
+            "id":            o["id"],
+            "total":         o["total"],
+            "status":        o["status"],
+            "createdAt":     o["created_at"],
+            "itemCount":     len(items)
+        });
+    }
+    return json_ok(orders);
+}
+
+// ─── Review Handler ───────────────────────────────────────────
+
+def handle_post_review(req, product_id) {
+    body      = from_json(req["body"]);
+    user_name = body["userName"];
+    rating    = body["rating"];
+    comment   = body["comment"];
+    user_id   = body["userId"];
+    if user_id == null { user_id = "guest"; }
+
+    db_exec("INSERT INTO reviews (product_id, user_id, user_name, rating, comment) VALUES (?,?,?,?,?)",
+            [product_id, user_id, user_name, rating, comment]);
+
+    // Update product rating (rolling average)
+    prod_rows = db_query("SELECT rating, review_count FROM products WHERE id = ?", [product_id]);
+    if len(prod_rows) > 0 {
+        old_rating = prod_rows[0]["rating"];
+        old_count  = prod_rows[0]["review_count"];
+        new_count  = old_count + 1;
+        new_rating = (old_rating * old_count + rating) / new_count;
+        db_exec("UPDATE products SET rating = ?, review_count = ? WHERE id = ?",
+                [new_rating, new_count, product_id]);
+        // Invalidate cache
+        redis_del("product:" + product_id);
+    }
+
+    kafka_produce("review-events", product_id, to_json({
+        "event":     "REVIEW_POSTED",
+        "productId": product_id,
+        "rating":    rating
+    }));
+
+    return json_ok({"message": "Review submitted successfully"});
+}
+
+// ─── User Auth (simple) ───────────────────────────────────────
+
+def handle_register(req) {
+    body  = from_json(req["body"]);
+    email = body["email"];
+    name  = body["name"];
+    phone = body["phone"];
+
+    existing = db_query("SELECT id FROM users WHERE email = ?", [email]);
+    if len(existing) > 0 {
+        return json_err(400, "Email already registered");
+    }
+
+    user_id = "USR-" + email;
+    db_exec("INSERT INTO users (id, email, name, phone) VALUES (?,?,?,?)",
+            [user_id, email, name, phone]);
+
+    token = "tok-" + user_id;
+    redis_setex("session:" + token, 86400, to_json({"userId": user_id, "email": email, "name": name}));
+
+    return json_ok({"userId": user_id, "token": token, "name": name, "email": email});
+}
+
+def handle_login(req) {
+    body  = from_json(req["body"]);
+    email = body["email"];
+    rows  = db_query("SELECT * FROM users WHERE email = ?", [email]);
+    if len(rows) == 0 {
+        return json_err(401, "Invalid credentials");
+    }
+    u = rows[0];
+    token = "tok-" + u["id"];
+    redis_setex("session:" + token, 86400, to_json({"userId": u["id"], "email": u["email"], "name": u["name"]}));
+    return json_ok({"userId": u["id"], "token": token, "name": u["name"], "email": u["email"]});
+}
+
+// ─── Wishlist ─────────────────────────────────────────────────
+
+def handle_wishlist_add(req) {
+    body       = from_json(req["body"]);
+    user_id    = body["userId"];
+    product_id = body["productId"];
+    if user_id == null { return json_err(401, "Login required"); }
+    existing = db_query("SELECT id FROM wishlist WHERE user_id = ? AND product_id = ?", [user_id, product_id]);
+    if len(existing) == 0 {
+        db_exec("INSERT INTO wishlist (user_id, product_id) VALUES (?,?)", [user_id, product_id]);
+    }
+    return json_ok({"message": "Added to wishlist"});
+}
+
+def handle_wishlist_remove(req) {
+    body       = from_json(req["body"]);
+    user_id    = body["userId"];
+    product_id = body["productId"];
+    db_exec("DELETE FROM wishlist WHERE user_id = ? AND product_id = ?", [user_id, product_id]);
+    return json_ok({"message": "Removed from wishlist"});
+}
+
+def handle_get_wishlist(req, user_id) {
+    rows = db_query("SELECT p.* FROM wishlist w JOIN products p ON w.product_id = p.id WHERE w.user_id = ?", [user_id]);
+    products = [];
+    i = 0;
+    while i < len(rows) {
+        r = rows[i];
+        i = i + 1;
+        products.append({
+            "id":       r["id"],
+            "name":     r["name"],
+            "brand":    r["brand"],
+            "price":    r["price"],
+            "imageUrl": r["image_url"],
+            "rating":   r["rating"]
+        });
+    }
+    return json_ok(products);
+}
+
+// ─── Search ───────────────────────────────────────────────────
+
+def handle_search(req) {
+    query = get_query_param(req["query"], "q");
+    if query == "" {
+        return json_ok({"products": [], "total": 0});
+    }
+
+    // Try cache
+    cache_key = "search:" + lower(query);
+    cached = redis_get(cache_key);
+    if cached != null {
+        return {"status": 200, "body": cached, "content_type": "application/json"};
+    }
+
+    all_products = load_products_from_db();
+    results = [];
+    q_lower = lower(query);
+    i = 0;
+    while i < len(all_products) {
+        p = all_products[i];
+        i = i + 1;
+        match = false;
+        if contains(lower(p["name"]), q_lower)     { match = true; }
+        if contains(lower(p["brand"]), q_lower)    { match = true; }
+        if contains(lower(p["category"]), q_lower) { match = true; }
+        if match { results.append(p); }
+    }
+
+    resp = to_json({"products": results, "total": len(results), "query": query});
+    redis_setex(cache_key, 120, resp);
+    return {"status": 200, "body": resp, "content_type": "application/json"};
+}
+
+// ─── Trending & Featured ─────────────────────────────────────
+
+def handle_trending(req) {
+    limit = parse_int_param(get_query_param(req["query"], "limit"), 12);
+    rows = db_query("SELECT * FROM products WHERE is_trending = 1 ORDER BY rating DESC LIMIT ?", [limit]);
+    products = [];
+    i = 0;
+    while i < len(rows) {
+        r = rows[i];
+        i = i + 1;
+        products.append({
+            "id":       r["id"],
+            "name":     r["name"],
+            "brand":    r["brand"],
+            "price":    r["price"],
+            "originalPrice": r["original_price"],
+            "discount": r["discount"],
+            "imageUrl": r["image_url"],
+            "rating":   r["rating"],
+            "isTrending": true,
+            "isNew":    r["is_new"] == 1
+        });
+    }
+    return json_ok(products);
+}
+
+def handle_new_arrivals(req) {
+    limit = parse_int_param(get_query_param(req["query"], "limit"), 12);
+    rows = db_query("SELECT * FROM products WHERE is_new = 1 ORDER BY rating DESC LIMIT ?", [limit]);
+    products = [];
+    i = 0;
+    while i < len(rows) {
+        r = rows[i];
+        i = i + 1;
+        products.append({
+            "id":       r["id"],
+            "name":     r["name"],
+            "brand":    r["brand"],
+            "price":    r["price"],
+            "originalPrice": r["original_price"],
+            "discount": r["discount"],
+            "imageUrl": r["image_url"],
+            "rating":   r["rating"],
+            "isNew":    true
+        });
+    }
+    return json_ok(products);
+}
+
+// ─── Kafka Events Viewer ──────────────────────────────────────
+
+def handle_events(req) {
+    events = kafka_events();
+    return json_ok({"events": events, "count": len(events)});
+}
+
+// ─── Router ──────────────────────────────────────────────────
+
+def router(req) {
+    method = req["method"];
+    path   = req["path"];
+    query  = req["query"];
+
+    // CORS preflight
+    if method == "OPTIONS" {
+        return {"status": 204, "body": "", "content_type": "text/plain"};
+    }
+
+    // Static files
+    if method == "GET" {
+        if path == "/" {
+            content = read_file("examples/ecommerce/frontend/public/index.html");
+            return {"status": 200, "body": content, "content_type": "text/html"};
+        }
+        if ends_with(path, ".js") {
+            js_path = "examples/ecommerce/frontend" + path;
+            if file_exists(js_path) {
+                content = read_file(js_path);
+                return {"status": 200, "body": content, "content_type": "application/javascript"};
+            }
+        }
+        if ends_with(path, ".css") {
+            css_path = "examples/ecommerce/frontend" + path;
+            if file_exists(css_path) {
+                content = read_file(css_path);
+                return {"status": 200, "body": content, "content_type": "text/css"};
+            }
+        }
+    }
+
+    // Extract path segments safely
+    parts = split(path, "/");
+    nparts = len(parts);
+
+    p1 = "";
+    p2 = "";
+    p3 = "";
+    p4 = "";
+    if nparts >= 2 { p1 = parts[1]; }
+    if nparts >= 3 { p2 = parts[2]; }
+    if nparts >= 4 { p3 = parts[3]; }
+    if nparts >= 5 { p4 = parts[4]; }
+
+    // Session ID from header or query
+    session_id = req["headers"]["x-session-id"];
+    if session_id == null { session_id = get_query_param(query, "sessionId"); }
+    if session_id == null { session_id = "guest-session"; }
+
+    // API routes
+    if p1 == "api" {
+        // Health
+        if p2 == "health" { return handle_health(req); }
+
+        // Products
+        if p2 == "products" {
+            if p3 == "" {
+                if method == "GET" { return handle_get_products(req); }
+            } else {
+                if p4 == "" {
+                    if method == "GET" { return handle_get_product(req, p3); }
+                }
+                if p4 == "reviews" {
+                    if method == "POST" { return handle_post_review(req, p3); }
+                }
+                if p4 == "recommendations" {
+                    if method == "GET" { return handle_recommendations_pdp(req, p3); }
+                }
+            }
+        }
+
+        // Categories
+        if p2 == "categories" {
+            if method == "GET" { return handle_get_categories(req); }
+        }
+
+        // Search
+        if p2 == "search" {
+            if method == "GET" { return handle_search(req); }
+        }
+
+        // Trending
+        if p2 == "trending" {
+            if method == "GET" { return handle_trending(req); }
+        }
+
+        // New arrivals
+        if p2 == "new-arrivals" {
+            if method == "GET" { return handle_new_arrivals(req); }
+        }
+
+        // Recommendations (PLP)
+        if p2 == "recommendations" {
+            if method == "GET" { return handle_recommendations_plp(req); }
+        }
+
+        // Cart
+        if p2 == "cart" {
+            if p3 == "" {
+                if method == "GET"    { return handle_get_cart(req, session_id); }
+                if method == "POST"   { return handle_add_to_cart(req, session_id); }
+                if method == "PUT"    { return handle_update_cart(req, session_id); }
+                if method == "DELETE" { return handle_clear_cart(req, session_id); }
+            }
+        }
+
+        // Checkout
+        if p2 == "checkout" {
+            if method == "POST" { return handle_checkout(req, session_id); }
+        }
+
+        // Orders
+        if p2 == "orders" {
+            if p3 == "" {
+                if method == "GET" { return handle_get_orders(req, session_id); }
+            } else {
+                if method == "GET" { return handle_get_order(req, p3); }
+            }
+        }
+
+        // Auth
+        if p2 == "auth" {
+            if p3 == "register" { if method == "POST" { return handle_register(req); } }
+            if p3 == "login"    { if method == "POST" { return handle_login(req); } }
+        }
+
+        // Wishlist
+        if p2 == "wishlist" {
+            if p3 == "" {
+                if method == "POST"   { return handle_wishlist_add(req); }
+                if method == "DELETE" { return handle_wishlist_remove(req); }
+            } else {
+                if method == "GET" { return handle_get_wishlist(req, p3); }
+            }
+        }
+
+        // Events (Kafka log)
+        if p2 == "events" {
+            if method == "GET" { return handle_events(req); }
+        }
+
+        return json_err(404, "API endpoint not found");
+    }
+
+    return json_err(404, "Not found");
+}
+
+// ─── Boot ─────────────────────────────────────────────────────
+
+print("=== SHYNX Fashion E-Commerce — UniLang Backend ===");
+print("Demonstrates: Java OOP + Python logic + SQLite + Redis + Kafka");
+init_db();
+seed_products();
+redis_connect("redis://127.0.0.1:6379");
+print("Redis connected");
+print("Starting server on http://localhost:8080");
+serve(8080, router);
