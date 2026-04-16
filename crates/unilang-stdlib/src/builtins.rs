@@ -74,6 +74,38 @@ pub fn register_all(vm: &mut VM) {
     vm.set_global("True", RuntimeValue::Bool(true));
     vm.set_global("False", RuntimeValue::Bool(false));
 
+    // File I/O extras
+    vm.register_builtin("write_file",  builtin_write_file);
+    vm.register_builtin("file_size",   builtin_file_size);
+    vm.register_builtin("list_dir",    builtin_list_dir);
+
+    // Collection standalone helpers
+    vm.register_builtin("append",   builtin_append);
+    vm.register_builtin("keys",     builtin_keys);
+    vm.register_builtin("values",   builtin_values);
+    vm.register_builtin("has_key",  builtin_has_key);
+
+    // Type utility
+    vm.register_builtin("type_of",  builtin_type);   // alias for type()
+
+    // Time
+    vm.register_builtin("now",   builtin_now);
+    vm.register_builtin("sleep", builtin_sleep);
+
+    // Random
+    vm.register_builtin("random",     builtin_random);
+    vm.register_builtin("random_int", builtin_random_int);
+
+    // Environment
+    vm.register_builtin("env_get", builtin_env_get);
+    vm.register_builtin("env_set", builtin_env_set);
+
+    // HTTP client
+    vm.register_builtin("http_get",    builtin_http_get);
+    vm.register_builtin("http_post",   builtin_http_post);
+    vm.register_builtin("http_put",    builtin_http_put);
+    vm.register_builtin("http_delete", builtin_http_delete);
+
     // HTTP server — handled specially in VM::call_builtin (needs &mut self)
     vm.set_global("serve", RuntimeValue::NativeFunction("serve".to_string()));
 }
@@ -175,6 +207,7 @@ fn builtin_type(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
         RuntimeValue::Function(_) => "function",
         RuntimeValue::Instance(data) => data.class_name.as_str(),
         RuntimeValue::NativeFunction(_) => "builtin_function",
+        RuntimeValue::Class(_) => "type",
     };
     Ok(RuntimeValue::String(name.to_string()))
 }
@@ -205,6 +238,7 @@ fn builtin_isinstance(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeErro
         RuntimeValue::Function(_) => "function",
         RuntimeValue::Instance(data) => data.class_name.as_str(),
         RuntimeValue::NativeFunction(_) => "builtin_function",
+        RuntimeValue::Class(_) => "type",
     };
     Ok(RuntimeValue::Bool(actual == type_name))
 }
@@ -388,4 +422,296 @@ fn builtin_file_exists(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeErr
         _ => return Err(RuntimeError::type_error("file_exists() requires a string path")),
     };
     Ok(RuntimeValue::Bool(std::path::Path::new(&path).exists()))
+}
+
+fn builtin_write_file(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    if args.len() < 2 {
+        return Err(RuntimeError::type_error("write_file(path, content) requires 2 arguments"));
+    }
+    let path = match &args[0] {
+        RuntimeValue::String(s) => s.clone(),
+        _ => return Err(RuntimeError::type_error("write_file(): path must be a string")),
+    };
+    let content = match &args[1] {
+        RuntimeValue::String(s) => s.clone(),
+        other => format!("{}", other),
+    };
+    std::fs::write(&path, &content)
+        .map_err(|e| RuntimeError::type_error(format!("write_file('{}') failed: {}", path, e)))?;
+    Ok(RuntimeValue::Bool(true))
+}
+
+fn builtin_file_size(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let path = match args.first() {
+        Some(RuntimeValue::String(s)) => s.clone(),
+        _ => return Err(RuntimeError::type_error("file_size() requires a string path")),
+    };
+    let meta = std::fs::metadata(&path)
+        .map_err(|e| RuntimeError::type_error(format!("file_size('{}') failed: {}", path, e)))?;
+    Ok(RuntimeValue::Int(meta.len() as i64))
+}
+
+fn builtin_list_dir(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let path = match args.first() {
+        Some(RuntimeValue::String(s)) => s.clone(),
+        _ => return Err(RuntimeError::type_error("list_dir() requires a string path")),
+    };
+    let entries = std::fs::read_dir(&path)
+        .map_err(|e| RuntimeError::type_error(format!("list_dir('{}') failed: {}", path, e)))?;
+    let names: Vec<RuntimeValue> = entries
+        .filter_map(|e| e.ok())
+        .map(|e| RuntimeValue::String(e.file_name().to_string_lossy().into_owned()))
+        .collect();
+    Ok(RuntimeValue::List(names))
+}
+
+// ── Collection standalone helpers ─────────────────────────────
+
+fn builtin_append(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    if args.len() < 2 {
+        return Err(RuntimeError::type_error("append(list, item) requires 2 arguments"));
+    }
+    match &args[0] {
+        RuntimeValue::List(items) => {
+            let mut out = items.clone();
+            out.push(args[1].clone());
+            Ok(RuntimeValue::List(out))
+        }
+        _ => Err(RuntimeError::type_error("append(): first argument must be a list")),
+    }
+}
+
+fn builtin_keys(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    match args.first() {
+        Some(RuntimeValue::Dict(pairs)) => {
+            Ok(RuntimeValue::List(pairs.iter().map(|(k, _)| k.clone()).collect()))
+        }
+        _ => Err(RuntimeError::type_error("keys() requires a dict argument")),
+    }
+}
+
+fn builtin_values(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    match args.first() {
+        Some(RuntimeValue::Dict(pairs)) => {
+            Ok(RuntimeValue::List(pairs.iter().map(|(_, v)| v.clone()).collect()))
+        }
+        _ => Err(RuntimeError::type_error("values() requires a dict argument")),
+    }
+}
+
+fn builtin_has_key(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    if args.len() < 2 {
+        return Err(RuntimeError::type_error("has_key(dict, key) requires 2 arguments"));
+    }
+    match &args[0] {
+        RuntimeValue::Dict(pairs) => {
+            Ok(RuntimeValue::Bool(pairs.iter().any(|(k, _)| k == &args[1])))
+        }
+        _ => Err(RuntimeError::type_error("has_key(): first argument must be a dict")),
+    }
+}
+
+// ── Time ──────────────────────────────────────────────────────
+
+fn builtin_now(_args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ms = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_millis() as i64)
+        .unwrap_or(0);
+    Ok(RuntimeValue::Int(ms))
+}
+
+fn builtin_sleep(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let secs = match args.first() {
+        Some(RuntimeValue::Int(n)) => *n as f64,
+        Some(RuntimeValue::Float(f)) => *f,
+        _ => return Err(RuntimeError::type_error("sleep(seconds) requires a number")),
+    };
+    if secs > 0.0 {
+        std::thread::sleep(std::time::Duration::from_secs_f64(secs));
+    }
+    Ok(RuntimeValue::Null)
+}
+
+// ── Random ───────────────────────────────────────────────────
+
+fn builtin_random(_args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    // Simple LCG seeded from current nanosecond for zero-dependency random
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(12345);
+    // Xorshift64
+    let mut x = seed.wrapping_add(0x9e3779b97f4a7c15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
+    x ^= x >> 31;
+    let f = (x >> 11) as f64 / (1u64 << 53) as f64;
+    Ok(RuntimeValue::Float(f))
+}
+
+fn builtin_random_int(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let lo = match args.first() {
+        Some(RuntimeValue::Int(n)) => *n,
+        _ => return Err(RuntimeError::type_error("random_int(min, max) requires integer arguments")),
+    };
+    let hi = match args.get(1) {
+        Some(RuntimeValue::Int(n)) => *n,
+        _ => return Err(RuntimeError::type_error("random_int(min, max) requires integer arguments")),
+    };
+    if hi < lo {
+        return Err(RuntimeError::type_error("random_int(min, max): max must be >= min"));
+    }
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let seed = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.subsec_nanos() as u64)
+        .unwrap_or(12345);
+    let mut x = seed.wrapping_add(0x9e3779b97f4a7c15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xbf58476d1ce4e5b9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94d049bb133111eb);
+    x ^= x >> 31;
+    let range = (hi - lo + 1) as u64;
+    Ok(RuntimeValue::Int(lo + (x % range) as i64))
+}
+
+// ── Environment ───────────────────────────────────────────────
+
+fn builtin_env_get(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let name = match args.first() {
+        Some(RuntimeValue::String(s)) => s.clone(),
+        _ => return Err(RuntimeError::type_error("env_get(name) requires a string argument")),
+    };
+    match std::env::var(&name) {
+        Ok(val) => Ok(RuntimeValue::String(val)),
+        Err(_) => Ok(RuntimeValue::Null),
+    }
+}
+
+fn builtin_env_set(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    if args.len() < 2 {
+        return Err(RuntimeError::type_error("env_set(name, value) requires 2 arguments"));
+    }
+    let name = match &args[0] {
+        RuntimeValue::String(s) => s.clone(),
+        _ => return Err(RuntimeError::type_error("env_set(): name must be a string")),
+    };
+    let val = match &args[1] {
+        RuntimeValue::String(s) => s.clone(),
+        other => format!("{}", other),
+    };
+    std::env::set_var(&name, &val);
+    Ok(RuntimeValue::Bool(true))
+}
+
+// ── HTTP client ───────────────────────────────────────────────
+
+fn http_response_to_dict(status: u16, body: String) -> RuntimeValue {
+    RuntimeValue::Dict(vec![
+        (RuntimeValue::String("status".into()),  RuntimeValue::Int(status as i64)),
+        (RuntimeValue::String("body".into()),    RuntimeValue::String(body)),
+        (RuntimeValue::String("ok".into()),      RuntimeValue::Bool(status < 400)),
+    ])
+}
+
+fn builtin_http_get(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let url = match args.first() {
+        Some(RuntimeValue::String(s)) => s.clone(),
+        _ => return Err(RuntimeError::type_error("http_get(url) requires a string URL")),
+    };
+    match ureq::get(&url).call() {
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.into_string().unwrap_or_default();
+            Ok(http_response_to_dict(status, body))
+        }
+        Err(ureq::Error::Status(code, resp)) => {
+            let body = resp.into_string().unwrap_or_default();
+            Ok(http_response_to_dict(code, body))
+        }
+        Err(e) => Err(RuntimeError::type_error(format!("http_get('{}') failed: {}", url, e))),
+    }
+}
+
+fn builtin_http_post(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    if args.len() < 2 {
+        return Err(RuntimeError::type_error("http_post(url, body) requires 2 arguments"));
+    }
+    let url = match &args[0] {
+        RuntimeValue::String(s) => s.clone(),
+        _ => return Err(RuntimeError::type_error("http_post(): url must be a string")),
+    };
+    let body = match &args[1] {
+        RuntimeValue::String(s) => s.clone(),
+        other => format!("{}", other),
+    };
+    let ct = if body.trim_start().starts_with('{') || body.trim_start().starts_with('[') {
+        "application/json"
+    } else {
+        "text/plain"
+    };
+    match ureq::post(&url).set("Content-Type", ct).send_string(&body) {
+        Ok(resp) => {
+            let status = resp.status();
+            let b = resp.into_string().unwrap_or_default();
+            Ok(http_response_to_dict(status, b))
+        }
+        Err(ureq::Error::Status(code, resp)) => {
+            let b = resp.into_string().unwrap_or_default();
+            Ok(http_response_to_dict(code, b))
+        }
+        Err(e) => Err(RuntimeError::type_error(format!("http_post('{}') failed: {}", url, e))),
+    }
+}
+
+fn builtin_http_put(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    if args.len() < 2 {
+        return Err(RuntimeError::type_error("http_put(url, body) requires 2 arguments"));
+    }
+    let url = match &args[0] {
+        RuntimeValue::String(s) => s.clone(),
+        _ => return Err(RuntimeError::type_error("http_put(): url must be a string")),
+    };
+    let body = match &args[1] {
+        RuntimeValue::String(s) => s.clone(),
+        other => format!("{}", other),
+    };
+    let ct = if body.trim_start().starts_with('{') || body.trim_start().starts_with('[') {
+        "application/json"
+    } else {
+        "text/plain"
+    };
+    match ureq::put(&url).set("Content-Type", ct).send_string(&body) {
+        Ok(resp) => {
+            let status = resp.status();
+            let b = resp.into_string().unwrap_or_default();
+            Ok(http_response_to_dict(status, b))
+        }
+        Err(ureq::Error::Status(code, resp)) => {
+            let b = resp.into_string().unwrap_or_default();
+            Ok(http_response_to_dict(code, b))
+        }
+        Err(e) => Err(RuntimeError::type_error(format!("http_put('{}') failed: {}", url, e))),
+    }
+}
+
+fn builtin_http_delete(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
+    let url = match args.first() {
+        Some(RuntimeValue::String(s)) => s.clone(),
+        _ => return Err(RuntimeError::type_error("http_delete(url) requires a string URL")),
+    };
+    match ureq::delete(&url).call() {
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.into_string().unwrap_or_default();
+            Ok(http_response_to_dict(status, body))
+        }
+        Err(ureq::Error::Status(code, resp)) => {
+            let body = resp.into_string().unwrap_or_default();
+            Ok(http_response_to_dict(code, body))
+        }
+        Err(e) => Err(RuntimeError::type_error(format!("http_delete('{}') failed: {}", url, e))),
+    }
 }

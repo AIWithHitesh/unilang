@@ -31,6 +31,17 @@ const MAX_STACK_DEPTH: usize = 100_000;
 /// Maximum call-frame depth (recursion limit).
 const MAX_CALL_DEPTH: usize = 10_000;
 
+/// An active exception handler registered by `PushExceptHandler`.
+struct ExceptHandler {
+    /// Index of the `frames` entry that pushed this handler.
+    frame_idx: usize,
+    /// Instruction pointer to jump to when an exception is caught.
+    catch_ip: usize,
+    /// Operand-stack depth at the time the handler was pushed (used to restore
+    /// the stack before entering the catch block).
+    stack_depth: usize,
+}
+
 /// The UniLang virtual machine.
 pub struct VM {
     /// Operand stack.
@@ -48,6 +59,8 @@ pub struct VM {
     output: Option<Vec<String>>,
     /// Registered builtin functions (includes drivers registered via DriverRegistry).
     builtins: HashMap<String, BuiltinFn>,
+    /// Active exception handlers (innermost first at the end).
+    except_handlers: Vec<ExceptHandler>,
 }
 
 impl VM {
@@ -61,6 +74,7 @@ impl VM {
             classes: Vec::new(),
             output: None,
             builtins: HashMap::new(),
+            except_handlers: Vec::new(),
         }
     }
 
@@ -175,7 +189,33 @@ impl VM {
         let instr = self.frames.last().unwrap().code[self.frames.last().unwrap().ip].clone();
         self.current_frame_mut().ip += 1;
 
-        self.execute(instr)
+        match self.execute(instr) {
+            Ok(cont) => Ok(cont),
+            Err(e) if e.kind == ErrorKind::Halt => Err(e),
+            Err(e) => {
+                // Check for an active exception handler in the current or any enclosing frame.
+                let current_frame_idx = self.frames.len().saturating_sub(1);
+                if let Some(handler_pos) = self
+                    .except_handlers
+                    .iter()
+                    .rposition(|h| h.frame_idx == current_frame_idx)
+                {
+                    let handler = self.except_handlers.remove(handler_pos);
+                    // Remove any nested handlers that were inside the try body.
+                    self.except_handlers
+                        .retain(|h| h.frame_idx < current_frame_idx);
+                    // Restore the operand stack to the depth at the time the handler was registered.
+                    self.stack.truncate(handler.stack_depth);
+                    // Push the exception message so the catch block can bind it.
+                    self.push(RuntimeValue::String(e.message.clone()));
+                    // Jump to the catch block.
+                    self.current_frame_mut().ip = handler.catch_ip;
+                    Ok(true)
+                } else {
+                    Err(e)
+                }
+            }
+        }
     }
 
     fn execute(&mut self, instr: Opcode) -> Result<bool, RuntimeError> {
@@ -577,6 +617,50 @@ impl VM {
                         let result = self.call_builtin(&name, &args)?;
                         self.push(result);
                     }
+                    RuntimeValue::Class(ref class_name) => {
+                        // Instantiate: create an empty instance, call __init__ if present.
+                        let class_name = class_name.clone();
+                        let mut args = Vec::with_capacity(n_args);
+                        for _ in 0..n_args {
+                            args.push(self.pop()?);
+                        }
+                        args.reverse();
+
+                        // Build the initial instance.
+                        let instance = RuntimeValue::Instance(InstanceData {
+                            class_name: class_name.clone(),
+                            fields: HashMap::new(),
+                        });
+
+                        // Look for __init__ in the class.
+                        let init_idx = self
+                            .classes
+                            .iter()
+                            .find(|c| c.name == class_name)
+                            .and_then(|cd| {
+                                cd.methods.iter().copied().find(|&idx| {
+                                    self.functions
+                                        .get(idx)
+                                        .map_or(false, |f| f.name == "__init__")
+                                })
+                            });
+
+                        if let Some(idx) = init_idx {
+                            // Inject `this` as a global before calling __init__.
+                            self.globals.insert("this".to_string(), instance.clone());
+                            // Call __init__ with the provided args (NOT including `this`).
+                            self.call_unilang_function(idx, args)?;
+                            // Recover the (possibly mutated) `this` from globals.
+                            let final_instance = self
+                                .globals
+                                .remove("this")
+                                .unwrap_or(instance);
+                            self.push(final_instance);
+                        } else {
+                            // No __init__ — push the empty instance directly.
+                            self.push(instance);
+                        }
+                    }
                     _ => {
                         return Err(RuntimeError::type_error(format!(
                             "{} is not callable",
@@ -640,10 +724,10 @@ impl VM {
                 }
             }
 
-            Opcode::MakeClass(_name, _member_count) => {
-                // Class definitions are already registered in self.classes at bytecode load time.
-                // Push Null as a placeholder so StoreLocal/StoreGlobal can consume it.
-                self.push(RuntimeValue::Null);
+            Opcode::MakeClass(ref name, _member_count) => {
+                // Class definitions are registered in self.classes at bytecode load time.
+                // Push a Class descriptor so that calling ClassName(args) creates an instance.
+                self.push(RuntimeValue::Class(name.clone()));
             }
 
             Opcode::NewInstance(ref name) => {
@@ -808,6 +892,25 @@ impl VM {
                 ));
             }
 
+            // ── Exception handling ────────────────────────────
+            Opcode::PushExceptHandler(catch_ip) => {
+                self.except_handlers.push(ExceptHandler {
+                    frame_idx: self.frames.len().saturating_sub(1),
+                    catch_ip,
+                    stack_depth: self.stack.len(),
+                });
+            }
+
+            Opcode::PopExceptHandler => {
+                self.except_handlers.pop();
+            }
+
+            Opcode::StoreExceptVar(ref name) => {
+                // The exception message was pushed onto the stack by the error handler in step().
+                let exc = self.pop()?;
+                self.globals.insert(name.clone(), exc);
+            }
+
             // ── Halt ─────────────────────────────────────────
             Opcode::Halt => {
                 return Err(RuntimeError::halt());
@@ -852,7 +955,17 @@ impl VM {
                         })
                     });
                 if let Some(idx) = func_idx {
-                    self.call_unilang_function(idx, args.to_vec())
+                    // Inject `this` into globals so the method body can access instance fields.
+                    let prev_this = self.globals.remove("this");
+                    self.globals.insert("this".to_string(), obj.clone());
+                    let result = self.call_unilang_function(idx, args.to_vec());
+                    // Restore previous `this` (or remove it if there was none).
+                    if let Some(prev) = prev_this {
+                        self.globals.insert("this".to_string(), prev);
+                    } else {
+                        self.globals.remove("this");
+                    }
+                    result
                 } else {
                     Err(RuntimeError::attribute_error(name))
                 }

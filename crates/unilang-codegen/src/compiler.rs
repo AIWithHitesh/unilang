@@ -90,7 +90,8 @@ impl Compiler {
         match &mut code[index] {
             Opcode::Jump(ref mut t)
             | Opcode::JumpIfFalse(ref mut t)
-            | Opcode::JumpIfTrue(ref mut t) => {
+            | Opcode::JumpIfTrue(ref mut t)
+            | Opcode::PushExceptHandler(ref mut t) => {
                 *t = target;
             }
             _ => {}
@@ -189,11 +190,51 @@ impl Compiler {
             }
             Stmt::Import(_) => { /* imports are a no-op at bytecode level */ }
             Stmt::Try(try_stmt) => {
-                // Execute the body; if an error occurs, run the first catch block.
-                // True exception handling (unwinding) is not yet supported, so we
-                // compile both branches and the finally unconditionally.
+                // ── try body ──────────────────────────────────────────────────
+                // Emit PushExceptHandler(catch_ip) with a placeholder address;
+                // the real address is patched after the body + jump-over are emitted.
+                let handler_idx = self.emit(Opcode::PushExceptHandler(0));
+
                 self.compile_block(&try_stmt.body);
-                // Compile finally block if present (runs regardless).
+
+                // After the body succeeds, remove the handler and jump over catch.
+                self.emit(Opcode::PopExceptHandler);
+                let jump_over_catch = self.emit_jump(Opcode::Jump(0));
+
+                // ── catch blocks ──────────────────────────────────────────────
+                // Patch the handler to point here.
+                self.patch_jump(handler_idx);
+
+                if !try_stmt.catch_clauses.is_empty() {
+                    let clause = &try_stmt.catch_clauses[0];
+                    // Bind the exception variable if the clause names one.
+                    if let Some(exc_name) = &clause.name {
+                        self.emit(Opcode::StoreExceptVar(exc_name.node.clone()));
+                    } else {
+                        // Discard the exception message that was pushed onto the stack.
+                        self.emit(Opcode::Pop);
+                    }
+                    self.compile_block(&clause.body);
+
+                    // Additional clauses (multi-catch): compile sequentially after the first.
+                    // In practice most UniLang programs only have one catch clause.
+                    for clause in try_stmt.catch_clauses.iter().skip(1) {
+                        if let Some(exc_name) = &clause.name {
+                            self.emit(Opcode::StoreExceptVar(exc_name.node.clone()));
+                        } else {
+                            self.emit(Opcode::Pop);
+                        }
+                        self.compile_block(&clause.body);
+                    }
+                } else {
+                    // No catch clause — just discard the exception.
+                    self.emit(Opcode::Pop);
+                }
+
+                // ── after catch ───────────────────────────────────────────────
+                self.patch_jump(jump_over_catch);
+
+                // ── finally ───────────────────────────────────────────────────
                 if let Some(finally) = &try_stmt.finally_block {
                     self.compile_block(finally);
                 }
@@ -830,8 +871,18 @@ impl Compiler {
                     self.emit(Opcode::SetIndex);       // pops value, index, collection; pushes modified collection
                     // Store the modified collection back to its source variable.
                     self.store_back_to_source(&obj.node);
-                    // Push Null as the expression result (assignment-as-expression for indexes returns null).
+                    // Push Null as the expression result.
                     self.emit(Opcode::LoadConst(Value::Null));
+                } else if let Expr::Attribute(obj_expr, attr) = &target.node {
+                    // Attribute assignment: obj.attr = value
+                    // SetAttr expects stack: [obj, value] (bottom to top): pops value first, then obj
+                    self.compile_expr(&obj_expr.node);              // push obj
+                    self.compile_expr(&value.node);                 // push value
+                    self.emit(Opcode::SetAttr(attr.node.clone()));  // pops value, pops obj, pushes modified obj
+                    // Store modified obj back to its source variable (e.g. 'this' or any named var).
+                    self.store_back_to_source(&obj_expr.node);
+                    // Leave the assigned value on stack as the expression result.
+                    self.compile_expr(&value.node);
                 } else {
                     self.compile_expr(&value.node);
                     self.emit(Opcode::Dup);

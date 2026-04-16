@@ -165,5 +165,6 @@ fn type_name(val: &RuntimeValue) -> &str {
         RuntimeValue::Function(_) => "function",
         RuntimeValue::Instance(data) => data.class_name.as_str(),
         RuntimeValue::NativeFunction(_) => "builtin_function",
+        RuntimeValue::Class(_) => "type",
     }
 }

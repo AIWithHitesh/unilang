@@ -387,7 +387,13 @@ fn parse_primary(p: &mut Parser<'_>) -> Spanned<Expr> {
             let tok = p.advance();
             Spanned::new(Expr::NullLit, tok.span)
         }
-        TokenKind::Identifier | TokenKind::KwThis | TokenKind::KwSuper => {
+        TokenKind::Identifier
+        | TokenKind::KwThis
+        | TokenKind::KwSuper
+        // Contextual keywords used as identifiers (e.g. `val = 5` assignment)
+        | TokenKind::KwVal
+        | TokenKind::KwVar
+        | TokenKind::KwConst => {
             let tok = p.advance();
             let span = tok.span;
             let name = p.source[span.start as usize..span.end as usize].to_string();
@@ -410,6 +416,50 @@ fn parse_int_literal(text: &str) -> i128 {
         i128::from_str_radix(&text[2..], 2).unwrap_or(0)
     } else {
         text.parse().unwrap_or(0)
+    }
+}
+
+/// Build an expression AST node for the raw text inside `{...}` in an f-string.
+///
+/// Handles:
+/// - Simple identifiers: `name` → `Ident("name")`
+/// - Dotted attribute paths: `this.width` → `Attribute(Ident("this"), "width")`
+/// - Deeper paths: `a.b.c` → `Attribute(Attribute(Ident("a"), "b"), "c")`
+///
+/// Everything else (calls, index access, arithmetic) falls back to a single `Ident`
+/// containing the raw text, which will be flagged by the semantic analyser if invalid.
+fn build_fstring_expr(text: &str, span: Span) -> Spanned<Expr> {
+    // Fast path: no dot — plain identifier.
+    if !text.contains('.') {
+        return Spanned::new(Expr::Ident(text.to_string()), span);
+    }
+    // Dotted path: split on `.` and build left-to-right Attribute chain.
+    let parts: Vec<&str> = text.splitn(2, '.').collect();
+    let head = Spanned::new(Expr::Ident(parts[0].trim().to_string()), span);
+    if parts.len() == 1 || parts[1].trim().is_empty() {
+        return head;
+    }
+    // Recursively handle remaining parts.
+    let tail = build_fstring_expr(parts[1].trim(), span);
+    // The tail might be a plain Ident or a deeper Attribute — either way, wrap head around it.
+    match tail.node {
+        Expr::Ident(field) => {
+            Spanned::new(Expr::Attribute(Box::new(head), Spanned::new(field, span)), span)
+        }
+        Expr::Attribute(inner_obj, field) => {
+            // Re-assemble: head.inner_obj.field  →  Attribute(Attribute(head, first_of_tail), rest)
+            // Walk the chain to prepend `head`.
+            let first_attr = if let Expr::Ident(ref name) = inner_obj.node {
+                Spanned::new(
+                    Expr::Attribute(Box::new(head), Spanned::new(name.clone(), span)),
+                    span,
+                )
+            } else {
+                head // fallback
+            };
+            Spanned::new(Expr::Attribute(Box::new(first_attr), field), span)
+        }
+        _ => head,
     }
 }
 
@@ -450,13 +500,17 @@ fn parse_fstring_parts(content: &str, span: Span) -> Spanned<Expr> {
             i += 1; // skip closing '}'
             let trimmed = expr_str.trim();
             if !trimmed.is_empty() {
-                let ident_expr = Spanned::new(Expr::Ident(trimmed.to_string()), span);
+                // Build the inner expression.
+                // Support dotted paths like `this.width` or `obj.field.sub`.
+                // More complex expressions (calls, indexing, arithmetic) remain as
+                // a single Ident for now — a future parser-based approach can extend this.
+                let inner_expr = build_fstring_expr(trimmed, span);
                 let str_callee = Spanned::new(Expr::Ident("str".to_string()), span);
                 let call = Expr::Call(
                     Box::new(str_callee),
                     vec![Argument {
                         name: None,
-                        value: ident_expr,
+                        value: inner_expr,
                     }],
                 );
                 parts.push(Spanned::new(call, span));

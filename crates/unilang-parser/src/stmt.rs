@@ -50,7 +50,11 @@ pub(crate) fn parse_stmt(p: &mut Parser<'_>) -> Spanned<Stmt> {
         TokenKind::KwAssert => parse_assert(p),
         TokenKind::KwImport => parse_import_stmt(p),
         TokenKind::KwFrom => parse_from_import(p),
-        TokenKind::KwVar | TokenKind::KwVal | TokenKind::KwConst => {
+        TokenKind::KwVar | TokenKind::KwVal | TokenKind::KwConst
+            // Only treat as a declaration keyword when followed by an identifier name.
+            // If followed by `=`, `+=`, etc. it's being used as an identifier (e.g. `val = 5`).
+            if matches!(p.peek_nth(1), TokenKind::Identifier | TokenKind::Colon) =>
+        {
             parse_var_decl_keyword(p, modifiers)
         }
         TokenKind::Identifier | TokenKind::KwVoid

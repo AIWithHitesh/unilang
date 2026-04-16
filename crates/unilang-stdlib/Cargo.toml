@@ -10,3 +10,4 @@ description = "Standard library of built-in functions for the UniLang runtime"
 unilang-common = { path = "../unilang-common" }
 unilang-runtime = { path = "../unilang-runtime" }
 unilang-codegen = { path = "../unilang-codegen" }
+ureq = { version = "2", default-features = false, features = ["tls"] }

@@ -68,17 +68,16 @@ fn builtin_split(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
 fn builtin_join(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     if args.len() < 2 {
         return Err(RuntimeError::type_error(
-            "join() requires 2 arguments (separator, list)",
+            "join() requires 2 arguments: join(list, sep) or join(sep, list)",
         ));
     }
-    let sep = expect_string(&args[0], "join")?;
-    let list = match &args[1] {
-        RuntimeValue::List(items) => items,
-        _ => {
-            return Err(RuntimeError::type_error(
-                "join() second argument must be a list",
-            ))
-        }
+    // Accept both orderings: join(list, sep) or join(sep, list)
+    let (list, sep): (&Vec<RuntimeValue>, &str) = match (&args[0], &args[1]) {
+        (RuntimeValue::List(items), RuntimeValue::String(s)) => (items, s.as_str()),
+        (RuntimeValue::String(s), RuntimeValue::List(items)) => (items, s.as_str()),
+        _ => return Err(RuntimeError::type_error(
+            "join() requires a list and a separator string",
+        )),
     };
     let result: Vec<String> = list.iter().map(|v| format!("{}", v)).collect();
     Ok(RuntimeValue::String(result.join(sep)))

@@ -120,6 +120,7 @@ impl Analyzer {
             "replace",
             "contains",
             "startswith",
+            "starts_with",
             "endswith",
             "ends_with",
             "format",
@@ -133,7 +134,31 @@ impl Analyzer {
             "from_json",
             // File I/O
             "read_file",
+            "write_file",
             "file_exists",
+            "file_size",
+            "list_dir",
+            // Collections (standalone aliases)
+            "append",
+            "keys",
+            "values",
+            "has_key",
+            // Type utility
+            "type_of",
+            // Time
+            "now",
+            "sleep",
+            // Random
+            "random",
+            "random_int",
+            // Environment
+            "env_get",
+            "env_set",
+            // HTTP client
+            "http_get",
+            "http_post",
+            "http_put",
+            "http_delete",
             // ── SQLite (db_* prefix — default SQL driver) ────────
             "db_connect",
             "db_query",
@@ -165,6 +190,12 @@ impl Analyzer {
             "redis_del",
             "redis_exists",
             "redis_incr",
+            "redis_decr",
+            "redis_ttl",
+            "redis_lpush",
+            "redis_lrange",
+            "redis_sadd",
+            "redis_smembers",
             "redis_hset",
             "redis_hget",
             "redis_hgetall",
@@ -174,12 +205,12 @@ impl Analyzer {
             "memcached_connect",
             "memcached_get",
             "memcached_set",
+            "memcached_set_with_ttl",
             "memcached_delete",
-            "memcached_add",
-            "memcached_replace",
             "memcached_incr",
             "memcached_decr",
             "memcached_flush",
+            "memcached_stats",
             // ── Kafka ─────────────────────────────────────────────
             "kafka_connect",
             "kafka_produce",
@@ -202,7 +233,8 @@ impl Analyzer {
                 name: (*name).to_string(),
                 ty: Type::Dynamic,
                 kind: SymbolKind::Function,
-                mutable: false,
+                // Mark as mutable so user code can shadow/rebind prelude names.
+                mutable: true,
                 span: prelude_span,
             };
             self.define_symbol(name, symbol, prelude_span);
@@ -382,6 +414,21 @@ impl Analyzer {
 
         // Enter class scope and visit body
         self.push_scope(ScopeKind::Class);
+
+        // Pre-define 'this' (and 'self' for Python-style) so method bodies don't
+        // get "undefined variable" errors for the receiver.
+        let prelude_span = Span::empty(0);
+        for receiver in &["this", "self"] {
+            let sym = Symbol {
+                name: (*receiver).to_string(),
+                ty: Type::Dynamic,
+                kind: SymbolKind::Variable,
+                mutable: true,
+                span: prelude_span,
+            };
+            self.define_symbol(receiver, sym, prelude_span);
+        }
+
         for stmt in &decl.body {
             self.visit_stmt(stmt);
         }

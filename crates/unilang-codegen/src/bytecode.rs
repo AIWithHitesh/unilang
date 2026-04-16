@@ -126,6 +126,17 @@ pub enum Opcode {
     /// `raise/throw expr`: stack [exception_value] → RuntimeError
     Raise,
 
+    /// Register an exception handler: if any error occurs before `PopExceptHandler`,
+    /// restore the stack to current depth, push the error message, and jump to `catch_ip`.
+    PushExceptHandler(usize),
+
+    /// Remove the most-recently-registered exception handler (no error occurred).
+    PopExceptHandler,
+
+    /// Pop the exception value from the stack and store it in a named global.
+    /// Emitted as the first instruction of every catch block.
+    StoreExceptVar(String),
+
     // ── Halt ─────────────────────────────────────────────
     /// Stop execution.
     Halt,

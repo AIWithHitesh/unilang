@@ -24,6 +24,8 @@ pub enum RuntimeValue {
     Instance(InstanceData),
     /// A native (built-in) function, identified by name.
     NativeFunction(std::string::String),
+    /// A class descriptor — callable to create an instance (via `__init__`).
+    Class(String),
 }
 
 /// Data for an instantiated class.
@@ -47,6 +49,7 @@ impl RuntimeValue {
             RuntimeValue::Function(_) => true,
             RuntimeValue::Instance(_) => true,
             RuntimeValue::NativeFunction(_) => true,
+            RuntimeValue::Class(_) => true,
         }
     }
 
@@ -166,6 +169,7 @@ impl fmt::Display for RuntimeValue {
             RuntimeValue::Function(idx) => write!(f, "<function {}>", idx),
             RuntimeValue::Instance(data) => write!(f, "<{} instance>", data.class_name),
             RuntimeValue::NativeFunction(name) => write!(f, "<builtin {}>", name),
+            RuntimeValue::Class(name) => write!(f, "<class {}>", name),
         }
     }
 }

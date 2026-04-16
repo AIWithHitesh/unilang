@@ -9,6 +9,7 @@ use crate::value::RuntimeValue;
 use crate::vm::VM;
 
 /// Helper to run instructions and return the VM.
+/// Uses capture mode so `vm.output()` works in assertions.
 fn run_instructions(
     instructions: Vec<Opcode>,
 ) -> (VM, Result<RuntimeValue, crate::error::RuntimeError>) {
@@ -17,7 +18,7 @@ fn run_instructions(
         functions: Vec::new(),
         classes: Vec::new(),
     };
-    let mut vm = VM::new();
+    let mut vm = VM::new_with_capture();
     let result = vm.run(&bytecode);
     (vm, result)
 }
@@ -32,7 +33,7 @@ fn run_with_functions(
         functions,
         classes: Vec::new(),
     };
-    let mut vm = VM::new();
+    let mut vm = VM::new_with_capture();
     let result = vm.run(&bytecode);
     (vm, result)
 }
