@@ -11,6 +11,9 @@ use unilang_runtime::vm::VM;
 pub fn register_all(vm: &mut VM) {
     vm.register_builtin("json_encode", builtin_json_encode);
     vm.register_builtin("json_decode", builtin_json_decode);
+    // Aliases used by server.uniL
+    vm.register_builtin("to_json",   builtin_json_encode);
+    vm.register_builtin("from_json", builtin_json_decode);
 }
 
 // ── Encode ────────────────────────────────────────────────────

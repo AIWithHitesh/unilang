@@ -60,7 +60,7 @@ pub struct VM {
 impl VM {
     /// Create a new VM (normal execution — output is NOT captured).
     pub fn new() -> Self {
-        Self {
+        let mut vm = Self {
             stack: Vec::new(),
             globals: HashMap::new(),
             frames: Vec::new(),
@@ -71,7 +71,9 @@ impl VM {
             db_conn: None,
             redis_conn: None,
             kafka_log: Vec::new(),
-        }
+        };
+        vm.register_vm_builtins();
+        vm
     }
 
     /// Create a VM that captures print output (used by tests and `execute_with_output`).
@@ -85,6 +87,24 @@ impl VM {
     /// Return captured print output (empty slice if capture was not enabled).
     pub fn output(&self) -> &[String] {
         self.output.as_deref().unwrap_or(&[])
+    }
+
+    /// Register the VM's own special-case built-ins (db_connect, redis_*, kafka_*, serve, etc.)
+    /// These use `&mut self` so they can't go through the `builtins` HashMap, but they must
+    /// appear in `globals` so that `LoadGlobal` can resolve them.
+    fn register_vm_builtins(&mut self) {
+        const VM_BUILTINS: &[&str] = &[
+            "db_connect", "db_query", "db_exec",
+            "redis_connect", "redis_get", "redis_set", "redis_setex",
+            "redis_del", "redis_exists", "redis_incr",
+            "redis_hset", "redis_hget", "redis_hgetall", "redis_hdel", "redis_expire",
+            "kafka_produce", "kafka_events",
+            "serve",
+        ];
+        for name in VM_BUILTINS {
+            self.globals.entry((*name).to_string())
+                .or_insert_with(|| RuntimeValue::NativeFunction((*name).to_string()));
+        }
     }
 
     /// Register a native built-in function.
@@ -939,7 +959,7 @@ impl VM {
                     .ok_or_else(|| RuntimeError::type_error("startswith() requires a string"))?;
                 Ok(RuntimeValue::Bool(s.starts_with(p)))
             }
-            "endswith" | "endsWith" => {
+            "endswith" | "endsWith" | "ends_with" => {
                 let p = args.first().and_then(|a| a.as_string())
                     .ok_or_else(|| RuntimeError::type_error("endswith() requires a string"))?;
                 Ok(RuntimeValue::Bool(s.ends_with(p)))
@@ -1262,18 +1282,19 @@ impl VM {
         }
 
         if name == "redis_setex" {
+            // Signature: redis_setex(key, seconds, value)
             let key = match args.first() {
                 Some(RuntimeValue::String(s)) => s.clone(),
-                _ => return Err(RuntimeError::type_error("redis_setex(key, value, seconds)")),
+                _ => return Err(RuntimeError::type_error("redis_setex(key, seconds, value)")),
             };
-            let val = match args.get(1) {
-                Some(v) => format!("{}", v),
-                None => return Err(RuntimeError::type_error("redis_setex(key, value, seconds)")),
-            };
-            let secs = match args.get(2) {
+            let secs = match args.get(1) {
                 Some(RuntimeValue::Int(n)) => *n,
                 Some(RuntimeValue::Float(f)) => *f as i64,
                 _ => 3600,
+            };
+            let val = match args.get(2) {
+                Some(v) => format!("{}", v),
+                None => return Err(RuntimeError::type_error("redis_setex(key, seconds, value)")),
             };
             let conn = self.redis_conn.as_mut()
                 .ok_or_else(|| RuntimeError::type_error("redis_setex: call redis_connect() first"))?;

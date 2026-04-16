@@ -121,6 +121,7 @@ impl Analyzer {
             "contains",
             "startswith",
             "endswith",
+            "ends_with",
             "format",
             // Character
             "chr",
@@ -128,6 +129,8 @@ impl Analyzer {
             // JSON
             "json_encode",
             "json_decode",
+            "to_json",
+            "from_json",
             // File I/O
             "read_file",
             "file_exists",
@@ -697,10 +700,20 @@ impl Analyzer {
 
             Expr::List(elements) => {
                 let mut elem_ty = Type::Unknown;
+                let mut mixed = false;
                 for elem in elements {
-                    elem_ty = self.visit_expr(elem);
+                    let t = self.visit_expr(elem);
+                    if matches!(elem_ty, Type::Unknown) {
+                        elem_ty = t;
+                    } else if std::mem::discriminant(&elem_ty) != std::mem::discriminant(&t) {
+                        mixed = true;
+                    }
                 }
-                Type::Array(Box::new(elem_ty))
+                if mixed {
+                    Type::Array(Box::new(Type::Dynamic))
+                } else {
+                    Type::Array(Box::new(elem_ty))
+                }
             }
 
             Expr::Dict(pairs) => {

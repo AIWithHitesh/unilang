@@ -4,258 +4,117 @@
 //  SQLite (embedded) • Redis (cache) • Kafka (async events)
 // ============================================================
 
-// ─── Java-style entity classes ───────────────────────────────
+// ─── Recommendation Engine ────────────────────────────────────
+// Python-style ML scoring functions (feature weights as globals)
 
-class Product {
-    String id;
-    String name;
-    String brand;
-    String category;
-    String subcategory;
-    float  price;
-    float  originalPrice;
-    int    discount;
-    String imageUrl;
-    String description;
-    List   sizes;
-    List   colors;
-    int    stock;
-    float  rating;
-    int    reviewCount;
-    bool   isTrending;
-    bool   isNew;
-    String gender;
-    List   tags;
+REC_W_RATING   = 0.35;
+REC_W_TRENDING = 0.25;
+REC_W_SALES    = 0.20;
+REC_W_NEW      = 0.10;
+REC_W_DISCOUNT = 0.10;
 
-    Product(id, name, brand, category, subcategory, price, originalPrice,
-            imageUrl, description, sizes, colors, stock, rating, reviewCount,
-            isTrending, isNew, gender, tags) {
-        this.id           = id;
-        this.name         = name;
-        this.brand        = brand;
-        this.category     = category;
-        this.subcategory  = subcategory;
-        this.price        = price;
-        this.originalPrice = originalPrice;
-        this.discount     = round((originalPrice - price) / originalPrice * 100);
-        this.imageUrl     = imageUrl;
-        this.description  = description;
-        this.sizes        = sizes;
-        this.colors       = colors;
-        this.stock        = stock;
-        this.rating       = rating;
-        this.reviewCount  = reviewCount;
-        this.isTrending   = isTrending;
-        this.isNew        = isNew;
-        this.gender       = gender;
-        this.tags         = tags;
-    }
-
-    // Java-style getters
-    String getId()         { return this.id; }
-    String getName()       { return this.name; }
-    float  getPrice()      { return this.price; }
-    String getCategory()   { return this.category; }
-    int    getStock()      { return this.stock; }
-    float  getRating()     { return this.rating; }
-    bool   isAvailable()   { return this.stock > 0; }
-
-    // Python-style utility
-    def to_dict() {
-        return {
-            "id": this.id,
-            "name": this.name,
-            "brand": this.brand,
-            "category": this.category,
-            "subcategory": this.subcategory,
-            "price": this.price,
-            "originalPrice": this.originalPrice,
-            "discount": this.discount,
-            "imageUrl": this.imageUrl,
-            "description": this.description,
-            "sizes": this.sizes,
-            "colors": this.colors,
-            "stock": this.stock,
-            "rating": this.rating,
-            "reviewCount": this.reviewCount,
-            "isTrending": this.isTrending,
-            "isNew": this.isNew,
-            "gender": this.gender,
-            "tags": this.tags,
-            "available": this.stock > 0
-        };
-    }
+def rec_score_product(p) {
+    rating_norm   = p["rating"] / 5.0;
+    trending_flag = 0;
+    if p["isTrending"] == true { trending_flag = 1; }
+    new_flag = 0;
+    if p["isNew"] == true { new_flag = 1; }
+    discount_norm = p["discount"] / 100.0;
+    sales_norm    = p["reviewCount"] / 1000.0;
+    if sales_norm > 1.0 { sales_norm = 1.0; }
+    score = (rating_norm * REC_W_RATING)
+          + (trending_flag * REC_W_TRENDING)
+          + (sales_norm * REC_W_SALES)
+          + (new_flag * REC_W_NEW)
+          + (discount_norm * REC_W_DISCOUNT);
+    return score;
 }
 
-class CartItem {
-    String productId;
-    String name;
-    float  price;
-    String size;
-    String color;
-    int    quantity;
-    String imageUrl;
-
-    CartItem(productId, name, price, size, color, quantity, imageUrl) {
-        this.productId = productId;
-        this.name      = name;
-        this.price     = price;
-        this.size      = size;
-        this.color     = color;
-        this.quantity  = quantity;
-        this.imageUrl  = imageUrl;
-    }
-
-    float getSubtotal() { return this.price * this.quantity; }
+def rec_similarity(p, target) {
+    score = 0.0;
+    if p["category"] == target["category"] { score = score + 0.4; }
+    if p["gender"] == target["gender"]     { score = score + 0.2; }
+    if p["brand"] == target["brand"]       { score = score + 0.2; }
+    diff = p["price"] - target["price"];
+    if diff < 0 { diff = diff * -1; }
+    price_ratio = diff / target["price"];
+    if price_ratio < 0.3 { score = score + 0.2; }
+    return score;
 }
 
-class Order {
-    String id;
-    String userId;
-    List   items;
-    float  total;
-    String status;
-    String address;
-    String paymentMethod;
-    String createdAt;
-    String estimatedDelivery;
-
-    Order(id, userId, items, total, address, paymentMethod, createdAt) {
-        this.id               = id;
-        this.userId           = userId;
-        this.items            = items;
-        this.total            = total;
-        this.status           = "CONFIRMED";
-        this.address          = address;
-        this.paymentMethod    = paymentMethod;
-        this.createdAt        = createdAt;
-        this.estimatedDelivery = "3-5 business days";
-    }
-
-    String getStatus()      { return this.status; }
-    void   setStatus(s)     { this.status = s; }
-    float  getTotal()       { return this.total; }
-}
-
-// ─── Recommendation Engine (Python-style ML logic) ───────────
-
-class RecommendationEngine {
-    // Feature weights for scoring
-    float w_rating   = 0.35;
-    float w_trending = 0.25;
-    float w_sales    = 0.20;
-    float w_new      = 0.10;
-    float w_discount = 0.10;
-
-    RecommendationEngine() {}
-
-    // PLP recommendations: filter + score for listing pages
-    def recommend_plp(products, category, gender, limit) {
-        scored = [];
-        i = 0;
-        while i < len(products) {
-            p = products[i];
-            i = i + 1;
-            cat_match = 0;
-            gen_match = 0;
-            if p["category"] == category { cat_match = 1; }
-            if category == "" { cat_match = 1; }
-            if p["gender"] == gender { gen_match = 1; }
-            if gender == "all" { gen_match = 1; }
-            if gender == "" { gen_match = 1; }
-            if cat_match == 0 { continue; }
-            if gen_match == 0 { continue; }
-            score = this.score_product(p);
-            scored.append({"product": p, "score": score});
-        }
-        // Sort by score descending (bubble sort)
-        scored = this.sort_by_score(scored);
-        result = [];
+def rec_sort_by_score(scored) {
+    n = len(scored);
+    i = 0;
+    while i < n {
         j = 0;
-        while j < len(scored) {
-            if j >= limit { break; }
-            result.append(scored[j]["product"]);
+        while j < n - i - 1 {
+            if scored[j]["score"] < scored[j+1]["score"] {
+                tmp = scored[j];
+                scored[j] = scored[j+1];
+                scored[j+1] = tmp;
+            }
             j = j + 1;
         }
-        return result;
+        i = i + 1;
     }
+    return scored;
+}
 
-    // PDP recommendations: similar products
-    def recommend_pdp(products, target_product, limit) {
-        scored = [];
-        i = 0;
-        while i < len(products) {
-            p = products[i];
-            i = i + 1;
-            if p["id"] == target_product["id"] { continue; }
-            sim = this.similarity(p, target_product);
-            if sim > 0.0 {
-                scored.append({"product": p, "score": sim});
-            }
+// PLP recommendations: filter + score for listing pages
+def rec_recommend_plp(products, category, gender, limit) {
+    scored = [];
+    i = 0;
+    while i < len(products) {
+        p = products[i];
+        i = i + 1;
+        cat_match = 0;
+        gen_match = 0;
+        if p["category"] == category { cat_match = 1; }
+        if category == "" { cat_match = 1; }
+        if p["gender"] == gender { gen_match = 1; }
+        if gender == "all" { gen_match = 1; }
+        if gender == "" { gen_match = 1; }
+        if cat_match == 0 { continue; }
+        if gen_match == 0 { continue; }
+        score = rec_score_product(p);
+        scored.append({"product": p, "score": score});
+    }
+    scored = rec_sort_by_score(scored);
+    result = [];
+    j = 0;
+    while j < len(scored) {
+        if j >= limit { break; }
+        result.append(scored[j]["product"]);
+        j = j + 1;
+    }
+    return result;
+}
+
+// PDP recommendations: similar products
+def rec_recommend_pdp(products, target_product, limit) {
+    scored = [];
+    i = 0;
+    while i < len(products) {
+        p = products[i];
+        i = i + 1;
+        if p["id"] == target_product["id"] { continue; }
+        sim = rec_similarity(p, target_product);
+        if sim > 0.0 {
+            scored.append({"product": p, "score": sim});
         }
-        scored = this.sort_by_score(scored);
-        result = [];
-        j = 0;
-        while j < len(scored) {
-            if j >= limit { break; }
-            result.append(scored[j]["product"]);
-            j = j + 1;
-        }
-        return result;
     }
-
-    def score_product(p) {
-        rating_norm   = p["rating"] / 5.0;
-        trending_flag = 0;
-        if p["isTrending"] == true { trending_flag = 1; }
-        new_flag = 0;
-        if p["isNew"] == true { new_flag = 1; }
-        discount_norm = p["discount"] / 100.0;
-        sales_norm    = p["reviewCount"] / 1000.0;
-        if sales_norm > 1.0 { sales_norm = 1.0; }
-        score = (rating_norm * this.w_rating)
-              + (trending_flag * this.w_trending)
-              + (sales_norm * this.w_sales)
-              + (new_flag * this.w_new)
-              + (discount_norm * this.w_discount);
-        return score;
+    scored = rec_sort_by_score(scored);
+    result = [];
+    j = 0;
+    while j < len(scored) {
+        if j >= limit { break; }
+        result.append(scored[j]["product"]);
+        j = j + 1;
     }
-
-    def similarity(p, target) {
-        score = 0.0;
-        if p["category"] == target["category"] { score = score + 0.4; }
-        if p["gender"] == target["gender"]     { score = score + 0.2; }
-        if p["brand"] == target["brand"]       { score = score + 0.2; }
-        // price proximity: within 30% -> boost
-        diff = p["price"] - target["price"];
-        if diff < 0 { diff = diff * -1; }
-        price_ratio = diff / target["price"];
-        if price_ratio < 0.3 { score = score + 0.2; }
-        return score;
-    }
-
-    def sort_by_score(scored) {
-        n = len(scored);
-        i = 0;
-        while i < n {
-            j = 0;
-            while j < n - i - 1 {
-                if scored[j]["score"] < scored[j+1]["score"] {
-                    tmp = scored[j];
-                    scored[j] = scored[j+1];
-                    scored[j+1] = tmp;
-                }
-                j = j + 1;
-            }
-            i = i + 1;
-        }
-        return scored;
-    }
+    return result;
 }
 
 // ─── Global State ─────────────────────────────────────────────
-
-rec_engine = RecommendationEngine();
 
 // In-memory carts: { sessionId -> [CartItem dict, ...] }
 carts = {};
@@ -272,82 +131,22 @@ def init_db() {
     db_connect("sqlite://ecommerce.db");
 
     // Users table
-    db_exec("CREATE TABLE IF NOT EXISTS users (
-        id TEXT PRIMARY KEY,
-        email TEXT UNIQUE NOT NULL,
-        name TEXT NOT NULL,
-        phone TEXT,
-        password_hash TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )", []);
+    db_exec("CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT UNIQUE NOT NULL, name TEXT NOT NULL, phone TEXT, password_hash TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)", []);
 
     // Products table (master catalog)
-    db_exec("CREATE TABLE IF NOT EXISTS products (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        brand TEXT,
-        category TEXT,
-        subcategory TEXT,
-        price REAL,
-        original_price REAL,
-        discount INTEGER,
-        image_url TEXT,
-        description TEXT,
-        stock INTEGER DEFAULT 0,
-        rating REAL DEFAULT 0,
-        review_count INTEGER DEFAULT 0,
-        is_trending INTEGER DEFAULT 0,
-        is_new INTEGER DEFAULT 0,
-        gender TEXT,
-        sizes TEXT,
-        colors TEXT,
-        tags TEXT
-    )", []);
+    db_exec("CREATE TABLE IF NOT EXISTS products (id TEXT PRIMARY KEY, name TEXT NOT NULL, brand TEXT, category TEXT, subcategory TEXT, price REAL, original_price REAL, discount INTEGER, image_url TEXT, description TEXT, stock INTEGER DEFAULT 0, rating REAL DEFAULT 0, review_count INTEGER DEFAULT 0, is_trending INTEGER DEFAULT 0, is_new INTEGER DEFAULT 0, gender TEXT, sizes TEXT, colors TEXT, tags TEXT)", []);
 
     // Orders table
-    db_exec("CREATE TABLE IF NOT EXISTS orders (
-        id TEXT PRIMARY KEY,
-        user_id TEXT,
-        session_id TEXT,
-        total REAL,
-        status TEXT DEFAULT 'CONFIRMED',
-        address TEXT,
-        payment_method TEXT,
-        estimated_delivery TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )", []);
+    db_exec("CREATE TABLE IF NOT EXISTS orders (id TEXT PRIMARY KEY, user_id TEXT, session_id TEXT, total REAL, status TEXT DEFAULT 'CONFIRMED', address TEXT, payment_method TEXT, estimated_delivery TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)", []);
 
     // Order items table
-    db_exec("CREATE TABLE IF NOT EXISTS order_items (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        order_id TEXT,
-        product_id TEXT,
-        name TEXT,
-        price REAL,
-        quantity INTEGER,
-        size TEXT,
-        color TEXT,
-        image_url TEXT
-    )", []);
+    db_exec("CREATE TABLE IF NOT EXISTS order_items (id INTEGER PRIMARY KEY AUTOINCREMENT, order_id TEXT, product_id TEXT, name TEXT, price REAL, quantity INTEGER, size TEXT, color TEXT, image_url TEXT)", []);
 
     // Reviews table
-    db_exec("CREATE TABLE IF NOT EXISTS reviews (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        product_id TEXT,
-        user_id TEXT,
-        user_name TEXT,
-        rating REAL,
-        comment TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )", []);
+    db_exec("CREATE TABLE IF NOT EXISTS reviews (id INTEGER PRIMARY KEY AUTOINCREMENT, product_id TEXT, user_id TEXT, user_name TEXT, rating REAL, comment TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)", []);
 
     // Wishlist
-    db_exec("CREATE TABLE IF NOT EXISTS wishlist (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        user_id TEXT,
-        product_id TEXT,
-        created_at TEXT DEFAULT CURRENT_TIMESTAMP
-    )", []);
+    db_exec("CREATE TABLE IF NOT EXISTS wishlist (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id TEXT, product_id TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP)", []);
 
     print("Database initialized");
 }
@@ -488,16 +287,8 @@ def seed_products() {
     while i < len(products_data) {
         p = products_data[i];
         i = i + 1;
-        db_exec("INSERT OR IGNORE INTO products
-            (id,name,brand,category,subcategory,price,original_price,discount,
-             image_url,description,stock,rating,review_count,
-             is_trending,is_new,gender,sizes,colors,tags)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            [p[0],p[1],p[2],p[3],p[4],p[5],p[6],
-             round((p[6]-p[5])/p[6]*100),
-             p[7],p[8],p[10],p[11],p[12],
-             p[13],p[14],p[15],p[9],
-             p[16],p[17]]);
+        db_exec("INSERT OR IGNORE INTO products (id,name,brand,category,subcategory,price,original_price,discount,image_url,description,stock,rating,review_count,is_trending,is_new,gender,sizes,colors,tags) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            [p[0],p[1],p[2],p[3],p[4],p[5],p[6],round((p[6]-p[5])/p[6]*100),p[7],p[8],p[11],p[12],p[13],p[14],p[15],p[16],p[9],p[10],p[17]]);
     }
     print("Seeded 100 fashion products");
 }
@@ -551,10 +342,10 @@ def json_err(code, msg) {
     return {"status": code, "body": to_json({"error": msg}), "content_type": "application/json"};
 }
 
-def parse_int_param(val, default) {
-    if val == "" { return default; }
-    if val == null { return default; }
-    return int(val);
+def parse_int_param(input_val, def_val) {
+    if input_val == "" { return def_val; }
+    if input_val == null { return def_val; }
+    return int(input_val);
 }
 
 def get_query_param(query, key) {
@@ -595,6 +386,51 @@ def handle_health(req) {
         "categories": len(categories),
         "uptime": "running"
     });
+}
+
+def sort_products(items, field, desc) {
+    n = len(items);
+    i = 0;
+    while i < n {
+        j = 0;
+        while j < n - i - 1 {
+            a = items[j][field];
+            b = items[j+1][field];
+            swap = false;
+            if desc == true  { if a < b { swap = true; } }
+            if desc == false { if a > b { swap = true; } }
+            if swap {
+                tmp = items[j];
+                items[j] = items[j+1];
+                items[j+1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return items;
+}
+
+def sort_newest(items) {
+    n = len(items);
+    i = 0;
+    while i < n {
+        j = 0;
+        while j < n - i - 1 {
+            a_new = 0;
+            b_new = 0;
+            if items[j]["isNew"] == true   { a_new = 1; }
+            if items[j+1]["isNew"] == true { b_new = 1; }
+            if a_new < b_new {
+                tmp = items[j];
+                items[j] = items[j+1];
+                items[j+1] = tmp;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return items;
 }
 
 def handle_get_products(req) {
@@ -687,51 +523,6 @@ def handle_get_products(req) {
     });
 }
 
-def sort_products(items, field, desc) {
-    n = len(items);
-    i = 0;
-    while i < n {
-        j = 0;
-        while j < n - i - 1 {
-            a = items[j][field];
-            b = items[j+1][field];
-            swap = false;
-            if desc == true  { if a < b { swap = true; } }
-            if desc == false { if a > b { swap = true; } }
-            if swap {
-                tmp = items[j];
-                items[j] = items[j+1];
-                items[j+1] = tmp;
-            }
-            j = j + 1;
-        }
-        i = i + 1;
-    }
-    return items;
-}
-
-def sort_newest(items) {
-    n = len(items);
-    i = 0;
-    while i < n {
-        j = 0;
-        while j < n - i - 1 {
-            a_new = 0;
-            b_new = 0;
-            if items[j]["isNew"] == true   { a_new = 1; }
-            if items[j+1]["isNew"] == true { b_new = 1; }
-            if a_new < b_new {
-                tmp = items[j];
-                items[j] = items[j+1];
-                items[j+1] = tmp;
-            }
-            j = j + 1;
-        }
-        i = i + 1;
-    }
-    return items;
-}
-
 def handle_get_product(req, product_id) {
     // Try Redis cache first (Java-style: check resource, Python-style: dict access)
     cached = redis_get("product:" + product_id);
@@ -772,7 +563,7 @@ def handle_get_product(req, product_id) {
 
     // Recommendations (PDP)
     all_products = load_products_from_db();
-    similar = rec_engine.recommend_pdp(all_products, product, 6);
+    similar = rec_recommend_pdp(all_products, product, 6);
 
     resp_body = to_json({
         "product":         product,
@@ -817,7 +608,7 @@ def handle_recommendations_plp(req) {
     limit    = parse_int_param(get_query_param(query, "limit"), 12);
 
     all_products = load_products_from_db();
-    recs = rec_engine.recommend_plp(all_products, category, gender, limit);
+    recs = rec_recommend_plp(all_products, category, gender, limit);
     return json_ok({"recommendations": recs, "count": len(recs)});
 }
 
@@ -836,7 +627,7 @@ def handle_recommendations_pdp(req, product_id) {
     };
     limit = parse_int_param(get_query_param(req["query"], "limit"), 8);
     all_products = load_products_from_db();
-    recs = rec_engine.recommend_pdp(all_products, target, limit);
+    recs = rec_recommend_pdp(all_products, target, limit);
     return json_ok({"recommendations": recs, "count": len(recs)});
 }
 
@@ -877,7 +668,8 @@ def handle_add_to_cart(req, session_id) {
     }
     items = carts[session_id];
 
-    // Check if same product+size+color exists
+    // Rebuild cart: update quantity if item exists, otherwise append
+    new_items = [];
     found = false;
     i = 0;
     while i < len(items) {
@@ -886,26 +678,23 @@ def handle_add_to_cart(req, session_id) {
         if it["productId"] == product_id {
             if it["size"] == size {
                 if it["color"] == color {
-                    it["quantity"] = it["quantity"] + quantity;
+                    new_items.append({"productId": it["productId"], "name": it["name"], "price": it["price"], "size": it["size"], "color": it["color"], "quantity": it["quantity"] + quantity, "imageUrl": it["imageUrl"], "brand": it["brand"]});
                     found = true;
+                } else {
+                    new_items.append(it);
                 }
+            } else {
+                new_items.append(it);
             }
+        } else {
+            new_items.append(it);
         }
     }
 
     if found == false {
-        new_item = {
-            "productId": product_id,
-            "name":      r["name"],
-            "price":     r["price"],
-            "size":      size,
-            "color":     color,
-            "quantity":  quantity,
-            "imageUrl":  r["image_url"],
-            "brand":     r["brand"]
-        };
-        carts[session_id].append(new_item);
+        new_items.append({"productId": product_id, "name": r["name"], "price": r["price"], "size": size, "color": color, "quantity": quantity, "imageUrl": r["image_url"], "brand": r["brand"]});
     }
+    carts[session_id] = new_items;
 
     // Kafka event
     kafka_produce("cart-events", session_id, to_json({"event": "ITEM_ADDED", "productId": product_id, "sessionId": session_id}));
@@ -929,16 +718,15 @@ def handle_update_cart(req, session_id) {
     while i < len(items) {
         it = items[i];
         i = i + 1;
-        match = false;
+        is_match = false;
         if it["productId"] == product_id {
             if it["size"] == size {
-                if it["color"] == color { match = true; }
+                if it["color"] == color { is_match = true; }
             }
         }
-        if match == true {
+        if is_match == true {
             if quantity > 0 {
-                it["quantity"] = quantity;
-                new_items.append(it);
+                new_items.append({"productId": it["productId"], "name": it["name"], "price": it["price"], "size": it["size"], "color": it["color"], "quantity": quantity, "imageUrl": it["imageUrl"], "brand": it["brand"]});
             }
         } else {
             new_items.append(it);
@@ -982,8 +770,7 @@ def handle_checkout(req, session_id) {
     now = "2026-04-15";
 
     // Save order
-    db_exec("INSERT INTO orders (id, user_id, session_id, total, status, address, payment_method, estimated_delivery)
-             VALUES (?, ?, ?, ?, 'CONFIRMED', ?, ?, '3-5 business days')",
+    db_exec("INSERT INTO orders (id, user_id, session_id, total, status, address, payment_method, estimated_delivery) VALUES (?, ?, ?, ?, 'CONFIRMED', ?, ?, '3-5 business days')",
             [order_id, user_id, session_id, total, to_json(address), payment_method]);
 
     // Save items
@@ -991,10 +778,8 @@ def handle_checkout(req, session_id) {
     while j < len(items) {
         it = items[j];
         j = j + 1;
-        db_exec("INSERT INTO order_items (order_id, product_id, name, price, quantity, size, color, image_url)
-                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                [order_id, it["productId"], it["name"], it["price"],
-                 it["quantity"], it["size"], it["color"], it["imageUrl"]]);
+        db_exec("INSERT INTO order_items (order_id, product_id, name, price, quantity, size, color, image_url) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [order_id, it["productId"], it["name"], it["price"], it["quantity"], it["size"], it["color"], it["imageUrl"]]);
         // Update stock
         db_exec("UPDATE products SET stock = stock - ? WHERE id = ?",
                 [it["quantity"], it["productId"]]);
@@ -1212,11 +997,11 @@ def handle_search(req) {
     while i < len(all_products) {
         p = all_products[i];
         i = i + 1;
-        match = false;
-        if contains(lower(p["name"]), q_lower)     { match = true; }
-        if contains(lower(p["brand"]), q_lower)    { match = true; }
-        if contains(lower(p["category"]), q_lower) { match = true; }
-        if match { results.append(p); }
+        is_match = false;
+        if contains(lower(p["name"]), q_lower)     { is_match = true; }
+        if contains(lower(p["brand"]), q_lower)    { is_match = true; }
+        if contains(lower(p["category"]), q_lower) { is_match = true; }
+        if is_match { results.append(p); }
     }
 
     resp = to_json({"products": results, "total": len(results), "query": query});

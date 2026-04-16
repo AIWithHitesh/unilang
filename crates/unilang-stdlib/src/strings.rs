@@ -18,7 +18,9 @@ pub fn register_all(vm: &mut VM) {
     vm.register_builtin("replace", builtin_replace);
     vm.register_builtin("contains", builtin_contains);
     vm.register_builtin("startswith", builtin_startswith);
+    vm.register_builtin("starts_with", builtin_startswith);
     vm.register_builtin("endswith", builtin_endswith);
+    vm.register_builtin("ends_with", builtin_endswith);
 }
 
 fn expect_string<'a>(val: &'a RuntimeValue, func: &str) -> Result<&'a str, RuntimeError> {
