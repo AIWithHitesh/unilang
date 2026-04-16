@@ -15,6 +15,7 @@ members = [
     "crates/unilang-codegen",
     "crates/unilang-runtime",
     "crates/unilang-stdlib",
+    "crates/unilang-drivers",
 ]
 
 [workspace.package]

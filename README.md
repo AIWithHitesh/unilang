@@ -3,7 +3,7 @@
 **A unified programming language that seamlessly integrates Python and Java syntax, enabling developers to leverage the best of both ecosystems in a single codebase.**
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
-[![Build Status](https://img.shields.io/badge/build-planning-yellow.svg)]()
+[![CI](https://github.com/AIWithHitesh/unilang/actions/workflows/ci.yml/badge.svg)](https://github.com/AIWithHitesh/unilang/actions/workflows/ci.yml)
 [![Contributions Welcome](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 ---
@@ -49,19 +49,30 @@ UniLang source files use the `.uniL` extension.
 
 ## Project Status
 
-UniLang is in **active development** with a working compiler pipeline:
+UniLang is in **active development** with a fully working compiler + runtime pipeline:
 
-- [x] Language specification
-- [x] Lexer (hand-written, full Python+Java token support)
-- [x] Parser (Pratt expression parser + recursive descent statements)
-- [x] Semantic analyzer (gradual type system, scope resolution, name binding)
-- [x] Code generation (stack-based bytecode with 40+ opcodes)
-- [x] Runtime VM (stack-based interpreter with call frames)
-- [x] Standard library (35+ built-in functions: math, collections, strings, I/O)
-- [x] CLI toolchain (`unilang run`, `unilang check`, `unilang compile`, `unilang lex`)
+**Compiler Pipeline**
+- [x] Lexer — hand-written, full Python + Java token support, f-strings, error recovery
+- [x] Parser — Pratt expression parser + recursive descent statements, both indent and brace blocks
+- [x] Semantic analyzer — gradual type system, scope resolution, name binding
+- [x] Code generation — stack-based bytecode with 40+ opcodes
+- [x] Runtime VM — stack-based interpreter with call frames, exception handling, class dispatch
+
+**Standard Library & Drivers**
+- [x] Standard library — 35+ built-in functions: math, strings, collections, I/O, JSON, HTTP, time
+- [x] HTTP server — `serve(port, router)` built-in for writing REST APIs directly in UniLang
+- [x] Driver ecosystem (`unilang-drivers`) — SQLite, Redis, Kafka, Elasticsearch (default); MySQL, PostgreSQL, MongoDB, Memcached (optional)
+
+**Toolchain & IDE**
+- [x] CLI — `unilang run`, `unilang check`, `unilang compile`, `unilang lex`
 - [x] Language Server Protocol (LSP) server
-- [x] IDE support (VS Code, JetBrains, Eclipse, standalone IDE)
-- [x] ML framework (custom Tensor, autograd, layers, optimizers)
+- [x] IDE support — VS Code, JetBrains, Eclipse, standalone Electron IDE
+- [x] CI/CD — GitHub Actions (build + lint + e2e on Linux, macOS, Windows)
+
+**Examples**
+- [x] [SHYNX e-commerce](examples/ecommerce/) — 100 products, SQLite + Redis + Kafka + AI recommendations
+- [x] [Library Management](examples/library-mgmt/) — 10K book dataset, REST API, ML prediction engine
+- [x] [ML Framework](examples/ml-framework/) — custom Tensor, autograd, layers, UniNN architecture
 
 ## Downloads & Installation
 
@@ -147,12 +158,10 @@ for epoch in range(100):
 
 | Example | Description |
 |---------|-------------|
+| [SHYNX E-Commerce](examples/ecommerce/) | Full-stack fashion store: SQLite, Redis cache, Kafka events, AI recommendations, 12 REST endpoints |
 | [ML Framework](examples/ml-framework/) | Neural network framework built from scratch with custom Tensor, layers, and UniNN model |
 | [Library Management](examples/library-mgmt/) | Full-stack app with REST API, 10K book dataset, ML prediction engine, and dashboard |
 | [Hello World](examples/basic/hello.uniL) | Simple mixed Python/Java syntax |
-| [ML Pipeline](examples/ml/ml_pipeline.uniL) | Java thread pools + scikit-learn ML |
-| [Threading](examples/threading/concurrent_processing.uniL) | Multi-threaded data processing |
-| [Web Service](examples/advanced/web_service.uniL) | Spring Boot + Python ML REST API |
 
 ## IDE & Tooling
 
@@ -210,10 +219,8 @@ for epoch in range(100):
 
 ### Prerequisites
 
-- Java 21+ (JDK)
-- Python 3.11+
-- Rust 1.75+ (for compiler)
-- LLVM 17+ (optional, for native compilation)
+- Rust 1.80+ (the only hard requirement — the compiler is pure Rust)
+- Java 21+ / Python 3.11+ are future v2.0 targets (not required today)
 
 ### Build from Source
 
@@ -237,40 +244,47 @@ unilang run hello.uniL
 
 ## Architecture Overview
 
+The current implementation uses a Rust-native compiler and stack-based VM. JVM and CPython backends are planned for v2.0.
+
 ```
 ┌─────────────────────────────────────────────────┐
-│                  .uniL Source                    │
+│              .uniL Source File                  │
 └─────────────┬───────────────────────────────────┘
               │
 ┌─────────────▼───────────────────────────────────┐
-│          Unified Lexer / Tokenizer              │
-│  (Handles both Python & Java token grammars)    │
+│     Unified Lexer  (unilang-lexer)              │
+│  Python + Java tokens, f-strings, comments      │
 └─────────────┬───────────────────────────────────┘
               │
 ┌─────────────▼───────────────────────────────────┐
-│         Context-Aware Parser (AST)              │
-│  (Resolves ambiguity via context analysis)      │
+│     Parser  (unilang-parser)                    │
+│  Pratt expressions · indent + brace blocks      │
+│  Classes, functions, control flow, exceptions   │
 └─────────────┬───────────────────────────────────┘
               │
 ┌─────────────▼───────────────────────────────────┐
-│          Semantic Analyzer                       │
-│  (Type inference, scope resolution, interop)    │
+│     Semantic Analyzer  (unilang-semantic)       │
+│  Gradual type inference · scope resolution      │
+│  Name binding · prelude function registry       │
 └─────────────┬───────────────────────────────────┘
               │
 ┌─────────────▼───────────────────────────────────┐
-│      UniLang Intermediate Representation (UIR)  │
-└──────┬──────────────────────────┬───────────────┘
-       │                          │
-┌──────▼──────┐          ┌───────▼───────┐
-│ JVM Backend │          │ Python Backend│
-│ (Bytecode)  │          │ (CPython/AST) │
-└──────┬──────┘          └───────┬───────┘
-       │                          │
-┌──────▼──────────────────────────▼───────────────┐
-│         UniLang Runtime (Bridge Layer)          │
-│  (JVM ↔ CPython interop, shared memory, GIL    │
-│   management, thread synchronization)           │
-└─────────────────────────────────────────────────┘
+│     Bytecode Compiler  (unilang-codegen)        │
+│  40+ opcodes · constant pool · function/class   │
+└─────────────┬───────────────────────────────────┘
+              │
+┌─────────────▼───────────────────────────────────┐
+│     Stack-Based VM  (unilang-runtime)           │
+│  Call frames · builtins registry · HTTP server  │
+├──────────────┬──────────────────────────────────┤
+│  stdlib      │  unilang-drivers                 │
+│  (35+ fns)   │  SQLite · Redis · Kafka · ES     │
+│              │  MySQL · Postgres · MongoDB       │
+└──────────────┴──────────────────────────────────┘
+
+── v2.0 targets (future) ───────────────────────────
+  JVM Backend → emit .class files, call Java libraries
+  CPython Bridge → import numpy, sklearn, torch
 ```
 
 ## Community

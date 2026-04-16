@@ -18,4 +18,5 @@ unilang-semantic = { path = "../unilang-semantic" }
 unilang-codegen = { path = "../unilang-codegen" }
 unilang-runtime = { path = "../unilang-runtime" }
 unilang-stdlib = { path = "../unilang-stdlib" }
+unilang-drivers = { path = "../unilang-drivers" }
 clap.workspace = true

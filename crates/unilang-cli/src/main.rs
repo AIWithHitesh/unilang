@@ -275,9 +275,11 @@ fn cmd_run(path: &str) {
         }
     };
 
-    // 4. Create VM, register stdlib builtins, and execute
+    // 4. Create VM, register stdlib builtins + all drivers, and execute
     let mut vm = unilang_runtime::vm::VM::new();
     unilang_stdlib::register_builtins(&mut vm);
+    let drivers = unilang_drivers::default_registry();
+    drivers.register_all(&mut vm);
 
     match vm.run(&bytecode) {
         Ok(_) => {}

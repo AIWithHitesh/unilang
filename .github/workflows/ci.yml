@@ -1,0 +1,164 @@
+name: CI
+
+on:
+  push:
+    branches: [ "main", "dev", "feature/**" ]
+  pull_request:
+    branches: [ "main" ]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ──────────────────────────────────────────────────────────────
+  # Build & test the full Rust workspace (compiler + VM + drivers)
+  # ──────────────────────────────────────────────────────────────
+  build:
+    name: Build (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo registry + build
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Build workspace (default features)
+        run: cargo build --workspace
+
+      - name: Build workspace (release)
+        run: cargo build --workspace --release
+
+      - name: Run workspace tests
+        run: cargo test --workspace
+
+  # ──────────────────────────────────────────────────────────────
+  # Lint (clippy + rustfmt) — Linux only, fast
+  # ──────────────────────────────────────────────────────────────
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ubuntu-cargo-lint-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ubuntu-cargo-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy (warnings as errors)
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+  # ──────────────────────────────────────────────────────────────
+  # End-to-end smoke tests — run sample .uniL programs
+  # ──────────────────────────────────────────────────────────────
+  e2e:
+    name: E2E smoke tests
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ubuntu-cargo-e2e-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: ubuntu-cargo-
+
+      - name: Build release binary
+        run: cargo build --release -p unilang-cli
+
+      - name: Smoke test — hello world
+        run: |
+          echo 'print("Hello from UniLang!")' > /tmp/hello.uniL
+          ./target/release/unilang run /tmp/hello.uniL
+
+      - name: Smoke test — lex check
+        run: |
+          echo 'x = 42' > /tmp/basic.uniL
+          ./target/release/unilang lex /tmp/basic.uniL
+
+      - name: Smoke test — parse check
+        run: |
+          echo 'def add(a, b) { return a + b; }' > /tmp/fn.uniL
+          ./target/release/unilang parse /tmp/fn.uniL
+
+      - name: Smoke test — semantic check
+        run: |
+          echo 'x = 1 + 2' > /tmp/sem.uniL
+          ./target/release/unilang check /tmp/sem.uniL
+
+      - name: Smoke test — compile to bytecode
+        run: |
+          echo 'print("bytecode test")' > /tmp/bc.uniL
+          ./target/release/unilang compile /tmp/bc.uniL
+
+      - name: Smoke test — class with fields
+        run: |
+          cat > /tmp/class.uniL << 'EOF'
+          class Point {
+              float x;
+              float y;
+              Point(x, y) {
+                  this.x = x;
+                  this.y = y;
+              }
+              def to_str() {
+                  return "(" + str(this.x) + ", " + str(this.y) + ")";
+              }
+          }
+          p = Point(3.0, 4.0)
+          print(p.to_str())
+          EOF
+          ./target/release/unilang run /tmp/class.uniL
+
+      - name: Smoke test — SQLite driver
+        run: |
+          cat > /tmp/sqlite_test.uniL << 'EOF'
+          db_connect("/tmp/ci_test.db")
+          db_exec("CREATE TABLE IF NOT EXISTS t (id INTEGER PRIMARY KEY, val TEXT)")
+          db_exec("INSERT INTO t (val) VALUES ('hello')")
+          rows = db_query("SELECT val FROM t")
+          print(rows[0]["val"])
+          EOF
+          ./target/release/unilang run /tmp/sqlite_test.uniL

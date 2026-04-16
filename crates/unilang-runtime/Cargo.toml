@@ -9,8 +9,6 @@ description = "Stack-based bytecode interpreter for the UniLang compiler"
 [dependencies]
 unilang-common = { path = "../unilang-common" }
 unilang-codegen = { path = "../unilang-codegen" }
-rusqlite = { version = "0.32", features = ["bundled"] }
-redis = { version = "0.27", default-features = false, features = ["tcp_nodelay"] }
 
 [dev-dependencies]
 unilang-lexer = { path = "../unilang-lexer" }

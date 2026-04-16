@@ -134,11 +134,30 @@ impl Analyzer {
             // File I/O
             "read_file",
             "file_exists",
-            // Database (MySQL)
+            // ── SQLite (db_* prefix — default SQL driver) ────────
             "db_connect",
             "db_query",
             "db_exec",
-            // Redis cache
+            // ── MySQL ─────────────────────────────────────────────
+            "mysql_connect",
+            "mysql_query",
+            "mysql_exec",
+            "mysql_close",
+            // ── PostgreSQL ────────────────────────────────────────
+            "pg_connect",
+            "pg_query",
+            "pg_exec",
+            "pg_close",
+            // ── MongoDB ───────────────────────────────────────────
+            "mongo_connect",
+            "mongo_db",
+            "mongo_find",
+            "mongo_find_one",
+            "mongo_insert",
+            "mongo_update",
+            "mongo_delete",
+            "mongo_count",
+            // ── Redis cache ───────────────────────────────────────
             "redis_connect",
             "redis_get",
             "redis_set",
@@ -151,10 +170,31 @@ impl Analyzer {
             "redis_hgetall",
             "redis_hdel",
             "redis_expire",
-            // Kafka events
+            // ── Memcached ─────────────────────────────────────────
+            "memcached_connect",
+            "memcached_get",
+            "memcached_set",
+            "memcached_delete",
+            "memcached_add",
+            "memcached_replace",
+            "memcached_incr",
+            "memcached_decr",
+            "memcached_flush",
+            // ── Kafka ─────────────────────────────────────────────
+            "kafka_connect",
             "kafka_produce",
             "kafka_events",
-            // HTTP server
+            "kafka_clear",
+            // ── Elasticsearch ─────────────────────────────────────
+            "es_connect",
+            "es_index",
+            "es_get",
+            "es_search",
+            "es_delete",
+            "es_create_index",
+            "es_delete_index",
+            "es_count",
+            // ── HTTP server ───────────────────────────────────────
             "serve",
         ];
         for name in PRELUDE_FUNCS {

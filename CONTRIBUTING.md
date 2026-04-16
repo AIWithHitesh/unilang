@@ -10,13 +10,14 @@ Thank you for your interest in contributing to UniLang! This document provides g
 2. [Getting Started](#getting-started)
 3. [Development Setup](#development-setup)
 4. [How to Contribute](#how-to-contribute)
-5. [Coding Standards](#coding-standards)
-6. [Commit Guidelines](#commit-guidelines)
-7. [Pull Request Process](#pull-request-process)
-8. [RFC Process](#rfc-process)
-9. [Issue Guidelines](#issue-guidelines)
-10. [Community](#community)
-11. [License](#license)
+5. [Writing a Driver](#writing-a-driver)
+6. [Coding Standards](#coding-standards)
+7. [Commit Guidelines](#commit-guidelines)
+8. [Pull Request Process](#pull-request-process)
+9. [RFC Process](#rfc-process)
+10. [Issue Guidelines](#issue-guidelines)
+11. [Community](#community)
+12. [License](#license)
 
 ---
 
@@ -179,6 +180,91 @@ make ci
          │
 10. Merge (maintainer)
 ```
+
+---
+
+## Writing a Driver
+
+UniLang's driver ecosystem (`crates/unilang-drivers/`) lets you add new database, cache, queue, or search-engine connectivity without touching VM or standard-library code.
+
+For the full walkthrough, see **[docs/DRIVERS.md](docs/DRIVERS.md)**. The quick version:
+
+### 1. Create your driver file
+
+```rust
+// crates/unilang-drivers/src/mydb.rs
+use std::sync::{Arc, Mutex};
+use unilang_runtime::vm::VM;
+use crate::{DriverCategory, UniLangDriver};
+
+pub struct MyDbDriver {
+    conn: Arc<Mutex<Option<mydb::Connection>>>,
+}
+
+impl MyDbDriver {
+    pub fn new() -> Self {
+        Self { conn: Arc::new(Mutex::new(None)) }
+    }
+}
+
+impl UniLangDriver for MyDbDriver {
+    fn name(&self)        -> &'static str { "mydb" }
+    fn version(&self)     -> &'static str { "1.0.0" }
+    fn description(&self) -> &'static str { "MyDB driver for UniLang" }
+    fn category(&self)    -> DriverCategory { DriverCategory::Database }
+
+    fn exported_functions(&self) -> &'static [&'static str] {
+        &["mydb_connect", "mydb_query", "mydb_close"]
+    }
+
+    fn register(&self, vm: &mut VM) {
+        let conn = Arc::clone(&self.conn);
+        vm.register_builtin("mydb_connect", move |args| {
+            // open connection, store in conn
+            Ok(unilang_runtime::value::Value::Bool(true))
+        });
+        // ... register mydb_query, mydb_close
+    }
+}
+```
+
+### 2. Add the dependency (optional — feature-gate it)
+
+```toml
+# crates/unilang-drivers/Cargo.toml
+mydb = { version = "1", optional = true }
+
+[features]
+mydb-driver = ["dep:mydb"]
+all-drivers = [..., "mydb-driver"]
+```
+
+### 3. Wire it into lib.rs
+
+```rust
+// crates/unilang-drivers/src/lib.rs
+#[cfg(feature = "mydb-driver")]
+mod mydb;
+
+pub fn default_registry() -> DriverRegistry {
+    let mut r = DriverRegistry::new();
+    // ...
+    #[cfg(feature = "mydb-driver")]
+    r.register(Box::new(mydb::MyDbDriver::new()));
+    r
+}
+```
+
+### 4. Add function names to the semantic analyzer
+
+Open `crates/unilang-semantic/src/analyzer.rs` and add your new function names to the `PRELUDE_FUNCS` static slice so the type-checker knows they exist at compile time.
+
+### 5. Open a PR
+
+The PR description should include:
+- What database/service is targeted
+- Which Cargo feature flag enables it
+- A minimal `.uniL` snippet showing usage
 
 ---
 

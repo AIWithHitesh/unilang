@@ -1,0 +1,65 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.
+
+[package]
+name = "unilang-drivers"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Official driver ecosystem for UniLang — databases, queues, caches, and search engines"
+
+[dependencies]
+unilang-runtime = { path = "../unilang-runtime" }
+
+# ── SQL Databases ────────────────────────────────────────────────
+rusqlite  = { version = "0.32", features = ["bundled"],           optional = true }
+mysql     = { version = "25",                                      optional = true }
+postgres  = { version = "0.19",                                    optional = true }
+
+# ── NoSQL / Document Databases ───────────────────────────────────
+mongodb   = { version = "2", features = ["sync"],                  optional = true }
+
+# ── Caching ──────────────────────────────────────────────────────
+redis     = { version = "0.27", default-features = false, features = ["tcp_nodelay"], optional = true }
+memcache  = { version = "0.17",                                    optional = true }
+
+# ── Search / Indexing ─────────────────────────────────────────────
+ureq      = { version = "2",                                       optional = true }
+
+# ── Serialization (shared) ───────────────────────────────────────
+serde_json = { version = "1" }
+
+[features]
+# Core drivers compiled by default.
+# mysql-driver / postgres-driver / mongodb-driver / memcached-driver require
+# Rust ≥ 1.85 (edition2024 toolchain) — enable them explicitly when needed.
+default = [
+    "sqlite",
+    "redis-driver",
+    "kafka",
+    "elasticsearch-driver",
+]
+
+# Individual driver feature flags — use these in your own crate to opt-in
+sqlite             = ["dep:rusqlite"]
+mysql-driver       = ["dep:mysql"]
+postgres-driver    = ["dep:postgres"]
+mongodb-driver     = ["dep:mongodb"]
+redis-driver       = ["dep:redis"]
+memcached-driver   = ["dep:memcache"]
+elasticsearch-driver = ["dep:ureq"]
+# kafka is in-memory by default; real Kafka via rdkafka is a separate crate
+kafka              = []
+
+# Enable every bundled driver at once
+all-drivers = [
+    "sqlite",
+    "mysql-driver",
+    "postgres-driver",
+    "mongodb-driver",
+    "redis-driver",
+    "memcached-driver",
+    "elasticsearch-driver",
+    "kafka",
+]
