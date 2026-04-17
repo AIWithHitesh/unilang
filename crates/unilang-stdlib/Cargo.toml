@@ -11,3 +11,12 @@ unilang-common = { path = "../unilang-common" }
 unilang-runtime = { path = "../unilang-runtime" }
 unilang-codegen = { path = "../unilang-codegen" }
 ureq = { version = "2", default-features = false, features = ["tls"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock"] }
+regex = "1"
+uuid = { version = "=1.4.1", features = ["v4"] }
+base64 = "0.22"
+sha2 = "0.10"
+md-5 = "0.10"
+hex = "0.4"
+hmac = "0.12"
+csv = "1"

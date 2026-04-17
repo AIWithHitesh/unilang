@@ -3,8 +3,9 @@
 
 //! Pratt expression parser for UniLang.
 
-use unilang_common::span::{Span, Spanned};
+use unilang_common::span::{SourceId, Span, Spanned};
 use unilang_lexer::token::TokenKind;
+use unilang_lexer::Lexer;
 
 use crate::ast::*;
 use crate::parser::Parser;
@@ -370,7 +371,7 @@ fn parse_primary(p: &mut Parser<'_>) -> Spanned<Expr> {
             let is_fstring = raw.starts_with('f') || raw.starts_with('F');
             let value = strip_string_quotes(raw);
             if is_fstring {
-                parse_fstring_parts(&value, span)
+                parse_fstring_parts(&value, span, p)
             } else {
                 Spanned::new(Expr::StringLit(value), span)
             }
@@ -443,9 +444,10 @@ fn build_fstring_expr(text: &str, span: Span) -> Spanned<Expr> {
     let tail = build_fstring_expr(parts[1].trim(), span);
     // The tail might be a plain Ident or a deeper Attribute — either way, wrap head around it.
     match tail.node {
-        Expr::Ident(field) => {
-            Spanned::new(Expr::Attribute(Box::new(head), Spanned::new(field, span)), span)
-        }
+        Expr::Ident(field) => Spanned::new(
+            Expr::Attribute(Box::new(head), Spanned::new(field, span)),
+            span,
+        ),
         Expr::Attribute(inner_obj, field) => {
             // Re-assemble: head.inner_obj.field  →  Attribute(Attribute(head, first_of_tail), rest)
             // Walk the chain to prepend `head`.
@@ -463,9 +465,36 @@ fn build_fstring_expr(text: &str, span: Span) -> Spanned<Expr> {
     }
 }
 
+/// Parse the expression text inside `{...}` in an f-string by re-lexing it.
+/// Falls back to `build_fstring_expr` if the sub-parser fails.
+fn parse_fstring_inline_expr(
+    expr_text: &str,
+    parent_span: Span,
+    source_id: SourceId,
+) -> Spanned<Expr> {
+    // Re-lex the expression text using a fresh Lexer.
+    let lexer = Lexer::new(source_id, expr_text);
+    let (tokens, _diags) = lexer.tokenize();
+    if tokens.is_empty() || (tokens.len() == 1 && tokens[0].kind == TokenKind::Eof) {
+        return Spanned::new(Expr::Ident(expr_text.to_string()), parent_span);
+    }
+    // Build a mini parser over the re-lexed tokens.
+    // The parser needs a &str for source slicing; we pass expr_text.
+    let mut mini_parser = Parser::new(tokens, expr_text, source_id);
+    let result = parse_expr(&mut mini_parser, Prec::None);
+    // If the parse yielded an error node, fall back to the simple dotted-path builder.
+    if matches!(result.node, Expr::Error) {
+        build_fstring_expr(expr_text, parent_span)
+    } else {
+        // Re-stamp the span to the parent span so diagnostics point at the f-string.
+        Spanned::new(result.node, parent_span)
+    }
+}
+
 /// Expand f-string content like `Hello, {name}!` into a concatenation AST:
 ///   "Hello, " + str(name) + "!"
-fn parse_fstring_parts(content: &str, span: Span) -> Spanned<Expr> {
+fn parse_fstring_parts(content: &str, span: Span, p: &mut Parser<'_>) -> Spanned<Expr> {
+    let source_id = p.source_id;
     let mut parts: Vec<Spanned<Expr>> = Vec::new();
     let mut buf = String::new();
     let chars: Vec<char> = content.chars().collect();
@@ -500,11 +529,8 @@ fn parse_fstring_parts(content: &str, span: Span) -> Spanned<Expr> {
             i += 1; // skip closing '}'
             let trimmed = expr_str.trim();
             if !trimmed.is_empty() {
-                // Build the inner expression.
-                // Support dotted paths like `this.width` or `obj.field.sub`.
-                // More complex expressions (calls, indexing, arithmetic) remain as
-                // a single Ident for now — a future parser-based approach can extend this.
-                let inner_expr = build_fstring_expr(trimmed, span);
+                // Re-parse the expression text using a real sub-parser.
+                let inner_expr = parse_fstring_inline_expr(trimmed, span, source_id);
                 let str_callee = Spanned::new(Expr::Ident("str".to_string()), span);
                 let call = Expr::Call(
                     Box::new(str_callee),

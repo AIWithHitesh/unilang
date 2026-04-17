@@ -107,7 +107,9 @@ pub struct DriverRegistry {
 impl DriverRegistry {
     /// Create an empty registry.
     pub fn new() -> Self {
-        Self { drivers: Vec::new() }
+        Self {
+            drivers: Vec::new(),
+        }
     }
 
     /// Add a driver to the registry.
@@ -174,6 +176,27 @@ pub mod elasticsearch;
 #[cfg(feature = "memcached-driver")]
 pub mod memcached;
 
+#[cfg(feature = "smtp")]
+pub mod smtp;
+
+#[cfg(feature = "influxdb")]
+pub mod influxdb;
+
+#[cfg(feature = "s3")]
+pub mod s3;
+
+#[cfg(feature = "rabbitmq")]
+pub mod rabbitmq;
+
+#[cfg(feature = "nats-driver")]
+pub mod nats;
+
+#[cfg(feature = "prometheus-driver")]
+pub mod prometheus_driver;
+
+#[cfg(feature = "websocket")]
+pub mod websocket;
+
 // ── Convenience: build the default registry ──────────────────────────────────
 
 /// Build a [`DriverRegistry`] pre-populated with every driver that was
@@ -206,6 +229,27 @@ pub fn default_registry() -> DriverRegistry {
 
     #[cfg(feature = "memcached-driver")]
     r.add(Box::new(memcached::MemcachedDriver::new()));
+
+    #[cfg(feature = "smtp")]
+    r.add(Box::new(smtp::SmtpDriver::new()));
+
+    #[cfg(feature = "influxdb")]
+    r.add(Box::new(influxdb::InfluxDbDriver::new()));
+
+    #[cfg(feature = "s3")]
+    r.add(Box::new(s3::S3Driver::new()));
+
+    #[cfg(feature = "rabbitmq")]
+    r.add(Box::new(rabbitmq::RabbitMqDriver::new()));
+
+    #[cfg(feature = "nats-driver")]
+    r.add(Box::new(nats::NatsDriver::new()));
+
+    #[cfg(feature = "prometheus-driver")]
+    r.add(Box::new(prometheus_driver::PrometheusDriver::new()));
+
+    #[cfg(feature = "websocket")]
+    r.add(Box::new(websocket::WebSocketDriver::new()));
 
     r
 }

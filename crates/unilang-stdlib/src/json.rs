@@ -12,7 +12,7 @@ pub fn register_all(vm: &mut VM) {
     vm.register_builtin("json_encode", builtin_json_encode);
     vm.register_builtin("json_decode", builtin_json_decode);
     // Aliases used by server.uniL
-    vm.register_builtin("to_json",   builtin_json_encode);
+    vm.register_builtin("to_json", builtin_json_encode);
     vm.register_builtin("from_json", builtin_json_decode);
 }
 
@@ -84,7 +84,7 @@ fn builtin_json_decode(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeErr
         .to_string();
     let mut p = JsonParser::new(&s);
     p.parse_value()
-        .ok_or_else(|| RuntimeError::type_error(format!("json_decode(): invalid JSON")))
+        .ok_or_else(|| RuntimeError::type_error("json_decode(): invalid JSON".to_string()))
 }
 
 struct JsonParser<'a> {
@@ -94,7 +94,10 @@ struct JsonParser<'a> {
 
 impl<'a> JsonParser<'a> {
     fn new(s: &'a str) -> Self {
-        Self { src: s.as_bytes(), pos: 0 }
+        Self {
+            src: s.as_bytes(),
+            pos: 0,
+        }
     }
 
     fn skip_ws(&mut self) {
@@ -109,7 +112,9 @@ impl<'a> JsonParser<'a> {
 
     fn eat(&mut self) -> Option<u8> {
         let b = self.src.get(self.pos).copied();
-        if b.is_some() { self.pos += 1; }
+        if b.is_some() {
+            self.pos += 1;
+        }
         b
     }
 
@@ -129,13 +134,25 @@ impl<'a> JsonParser<'a> {
             b'[' => self.parse_array(),
             b'{' => self.parse_object(),
             b't' => {
-                if self.expect_bytes(b"true") { Some(RuntimeValue::Bool(true)) } else { None }
+                if self.expect_bytes(b"true") {
+                    Some(RuntimeValue::Bool(true))
+                } else {
+                    None
+                }
             }
             b'f' => {
-                if self.expect_bytes(b"false") { Some(RuntimeValue::Bool(false)) } else { None }
+                if self.expect_bytes(b"false") {
+                    Some(RuntimeValue::Bool(false))
+                } else {
+                    None
+                }
             }
             b'n' => {
-                if self.expect_bytes(b"null") { Some(RuntimeValue::Null) } else { None }
+                if self.expect_bytes(b"null") {
+                    Some(RuntimeValue::Null)
+                } else {
+                    None
+                }
             }
             b'-' | b'0'..=b'9' => self.parse_number(),
             _ => None,
@@ -183,18 +200,28 @@ impl<'a> JsonParser<'a> {
     fn parse_number(&mut self) -> Option<RuntimeValue> {
         let start = self.pos;
         let mut is_float = false;
-        if self.peek() == Some(b'-') { self.pos += 1; }
-        while matches!(self.peek(), Some(b'0'..=b'9')) { self.pos += 1; }
+        if self.peek() == Some(b'-') {
+            self.pos += 1;
+        }
+        while matches!(self.peek(), Some(b'0'..=b'9')) {
+            self.pos += 1;
+        }
         if self.peek() == Some(b'.') {
             is_float = true;
             self.pos += 1;
-            while matches!(self.peek(), Some(b'0'..=b'9')) { self.pos += 1; }
+            while matches!(self.peek(), Some(b'0'..=b'9')) {
+                self.pos += 1;
+            }
         }
         if matches!(self.peek(), Some(b'e') | Some(b'E')) {
             is_float = true;
             self.pos += 1;
-            if matches!(self.peek(), Some(b'+') | Some(b'-')) { self.pos += 1; }
-            while matches!(self.peek(), Some(b'0'..=b'9')) { self.pos += 1; }
+            if matches!(self.peek(), Some(b'+') | Some(b'-')) {
+                self.pos += 1;
+            }
+            while matches!(self.peek(), Some(b'0'..=b'9')) {
+                self.pos += 1;
+            }
         }
         let slice = std::str::from_utf8(&self.src[start..self.pos]).ok()?;
         if is_float {
@@ -216,8 +243,13 @@ impl<'a> JsonParser<'a> {
             items.push(self.parse_value()?);
             self.skip_ws();
             match self.peek()? {
-                b',' => { self.eat(); }
-                b']' => { self.eat(); break; }
+                b',' => {
+                    self.eat();
+                }
+                b']' => {
+                    self.eat();
+                    break;
+                }
                 _ => return None,
             }
         }
@@ -236,13 +268,20 @@ impl<'a> JsonParser<'a> {
             self.skip_ws();
             let key = self.parse_string().map(RuntimeValue::String)?;
             self.skip_ws();
-            if self.eat()? != b':' { return None; }
+            if self.eat()? != b':' {
+                return None;
+            }
             let val = self.parse_value()?;
             pairs.push((key, val));
             self.skip_ws();
             match self.peek()? {
-                b',' => { self.eat(); }
-                b'}' => { self.eat(); break; }
+                b',' => {
+                    self.eat();
+                }
+                b'}' => {
+                    self.eat();
+                    break;
+                }
                 _ => return None,
             }
         }

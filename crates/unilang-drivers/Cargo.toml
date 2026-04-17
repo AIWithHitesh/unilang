@@ -27,6 +27,36 @@ memcache  = { version = "0.17",                                    optional = tr
 # ── Search / Indexing ─────────────────────────────────────────────
 ureq      = { version = "2",                                       optional = true }
 
+# ── Email ─────────────────────────────────────────────────────────
+# Minimal SMTP client deps — lettre is not used because its transitive deps
+# (chumsky → stacker → psm ≥ 0.1.26) require ar_archive_writer which needs the
+# unstable edition2024 Cargo feature (unavailable before Cargo 1.85).
+rustls          = { version = "0.23",  features = ["ring"], optional = true }
+rustls-pki-types = { version = "1",                          optional = true }
+webpki-roots    = { version = "0.26",                        optional = true }
+base64          = { version = "0.22",                        optional = true }
+
+# ── Time-series ───────────────────────────────────────────────────
+# (uses ureq, declared above)
+
+# ── Object Storage (S3 SigV4 deps) ───────────────────────────────
+sha2      = { version = "0.10",                                    optional = true }
+hmac      = { version = "0.12",                                    optional = true }
+hex       = { version = "0.4",                                     optional = true }
+
+# ── Messaging ─────────────────────────────────────────────────────
+# lapin is an async AMQP client for RabbitMQ. Uses tokio internally.
+lapin     = { version = "2",                                       optional = true }
+tokio     = { version = "1", features = ["rt", "rt-multi-thread"], optional = true }
+# nats 0.24 provides a blocking synchronous client API for NATS messaging
+nats      = { version = "0.24",                                    optional = true }
+
+# ── Metrics ───────────────────────────────────────────────────────
+prometheus = { version = "0.13", default-features = false,         optional = true }
+
+# ── WebSocket ─────────────────────────────────────────────────────
+tungstenite = { version = "0.24",                                  optional = true }
+
 # ── Serialization (shared) ───────────────────────────────────────
 serde_json = { version = "1" }
 
@@ -51,6 +81,13 @@ memcached-driver   = ["dep:memcache"]
 elasticsearch-driver = ["dep:ureq"]
 # kafka is in-memory by default; real Kafka via rdkafka is a separate crate
 kafka              = []
+smtp               = ["dep:rustls", "dep:rustls-pki-types", "dep:webpki-roots", "dep:base64"]
+influxdb           = ["dep:ureq"]
+s3                 = ["dep:ureq", "dep:sha2", "dep:hmac", "dep:hex"]
+rabbitmq           = ["dep:lapin", "dep:tokio"]
+nats-driver        = ["dep:nats"]
+prometheus-driver  = ["dep:prometheus"]
+websocket          = ["dep:tungstenite"]
 
 # Enable every bundled driver at once
 all-drivers = [
@@ -62,4 +99,11 @@ all-drivers = [
     "memcached-driver",
     "elasticsearch-driver",
     "kafka",
+    "smtp",
+    "influxdb",
+    "s3",
+    "rabbitmq",
+    "nats-driver",
+    "prometheus-driver",
+    "websocket",
 ]

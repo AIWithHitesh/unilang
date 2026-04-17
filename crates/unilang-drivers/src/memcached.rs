@@ -15,6 +15,8 @@
 //! | `memcached_incr` | `memcached_incr(key, delta?)` | Increment counter |
 //! | `memcached_decr` | `memcached_decr(key, delta?)` | Decrement counter |
 //! | `memcached_flush` | `memcached_flush()` | Flush all keys |
+//! | `memcached_set_with_ttl` | `memcached_set_with_ttl(key, value, ttl_seconds)` | Set with required TTL |
+//! | `memcached_stats` | `memcached_stats()` | Returns Dict of server→Dict of stat key/values |
 
 use std::sync::{Arc, Mutex};
 
@@ -30,26 +32,44 @@ pub struct MemcachedDriver {
 
 impl MemcachedDriver {
     pub fn new() -> Self {
-        Self { client: Arc::new(Mutex::new(None)) }
+        Self {
+            client: Arc::new(Mutex::new(None)),
+        }
     }
 }
 
 impl Default for MemcachedDriver {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UniLangDriver for MemcachedDriver {
-    fn name(&self) -> &str { "memcached" }
-    fn version(&self) -> &str { "1.0.0" }
-    fn description(&self) -> &str { "Memcached via pure-Rust memcache crate" }
-    fn category(&self) -> DriverCategory { DriverCategory::Cache }
+    fn name(&self) -> &str {
+        "memcached"
+    }
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+    fn description(&self) -> &str {
+        "Memcached via pure-Rust memcache crate"
+    }
+    fn category(&self) -> DriverCategory {
+        DriverCategory::Cache
+    }
     fn exported_functions(&self) -> &'static [&'static str] {
         &[
             "memcached_connect",
-            "memcached_get", "memcached_set", "memcached_delete",
-            "memcached_add", "memcached_replace",
-            "memcached_incr", "memcached_decr",
+            "memcached_get",
+            "memcached_set",
+            "memcached_delete",
+            "memcached_add",
+            "memcached_replace",
+            "memcached_incr",
+            "memcached_decr",
             "memcached_flush",
+            "memcached_set_with_ttl",
+            "memcached_stats",
         ]
     }
 
@@ -73,7 +93,8 @@ impl UniLangDriver for MemcachedDriver {
                 let key = str_arg(args, 0, "memcached_get(key)")?;
                 let guard = client.lock().unwrap();
                 let c = guard.as_ref().ok_or_else(|| no_conn("memcached_get"))?;
-                let result: Option<String> = c.get(&key)
+                let result: Option<String> = c
+                    .get(&key)
                     .map_err(|e| RuntimeError::type_error(format!("memcached_get: {}", e)))?;
                 Ok(match result {
                     Some(s) => RuntimeValue::String(s),
@@ -144,11 +165,12 @@ impl UniLangDriver for MemcachedDriver {
         {
             let client = Arc::clone(&self.client);
             vm.register_builtin("memcached_incr", move |args| {
-                let key   = str_arg(args, 0, "memcached_incr(key, delta?)")?;
+                let key = str_arg(args, 0, "memcached_incr(key, delta?)")?;
                 let delta = u64_arg(args, 1).unwrap_or(1);
                 let guard = client.lock().unwrap();
                 let c = guard.as_ref().ok_or_else(|| no_conn("memcached_incr"))?;
-                let new_val = c.increment(&key, delta)
+                let new_val = c
+                    .increment(&key, delta)
                     .map_err(|e| RuntimeError::type_error(format!("memcached_incr: {}", e)))?;
                 Ok(RuntimeValue::Int(new_val as i64))
             });
@@ -158,11 +180,12 @@ impl UniLangDriver for MemcachedDriver {
         {
             let client = Arc::clone(&self.client);
             vm.register_builtin("memcached_decr", move |args| {
-                let key   = str_arg(args, 0, "memcached_decr(key, delta?)")?;
+                let key = str_arg(args, 0, "memcached_decr(key, delta?)")?;
                 let delta = u64_arg(args, 1).unwrap_or(1);
                 let guard = client.lock().unwrap();
                 let c = guard.as_ref().ok_or_else(|| no_conn("memcached_decr"))?;
-                let new_val = c.decrement(&key, delta)
+                let new_val = c
+                    .decrement(&key, delta)
                     .map_err(|e| RuntimeError::type_error(format!("memcached_decr: {}", e)))?;
                 Ok(RuntimeValue::Int(new_val as i64))
             });
@@ -179,6 +202,52 @@ impl UniLangDriver for MemcachedDriver {
                 Ok(RuntimeValue::Null)
             });
         }
+
+        // memcached_set_with_ttl(key, value, ttl_seconds)
+        {
+            let client = Arc::clone(&self.client);
+            vm.register_builtin("memcached_set_with_ttl", move |args| {
+                let key = str_arg(args, 0, "memcached_set_with_ttl(key, value, ttl_seconds)")?;
+                let val = val_to_string(args.get(1))?;
+                let ttl = u32_arg(args, 2).ok_or_else(|| {
+                    RuntimeError::type_error(
+                        "memcached_set_with_ttl: ttl_seconds argument is required",
+                    )
+                })?;
+                let guard = client.lock().unwrap();
+                let c = guard
+                    .as_ref()
+                    .ok_or_else(|| no_conn("memcached_set_with_ttl"))?;
+                c.set(&key, val.as_str(), ttl).map_err(|e| {
+                    RuntimeError::type_error(format!("memcached_set_with_ttl: {}", e))
+                })?;
+                Ok(RuntimeValue::Null)
+            });
+        }
+
+        // memcached_stats()
+        {
+            let client = Arc::clone(&self.client);
+            vm.register_builtin("memcached_stats", move |_args| {
+                let guard = client.lock().unwrap();
+                let c = guard.as_ref().ok_or_else(|| no_conn("memcached_stats"))?;
+                let raw = c
+                    .stats()
+                    .map_err(|e| RuntimeError::type_error(format!("memcached_stats: {}", e)))?;
+                // raw: Vec<(String, HashMap<String, String>)>
+                let outer: Vec<(RuntimeValue, RuntimeValue)> = raw
+                    .into_iter()
+                    .map(|(server, map)| {
+                        let inner: Vec<(RuntimeValue, RuntimeValue)> = map
+                            .into_iter()
+                            .map(|(k, v)| (RuntimeValue::String(k), RuntimeValue::String(v)))
+                            .collect();
+                        (RuntimeValue::String(server), RuntimeValue::Dict(inner))
+                    })
+                    .collect();
+                Ok(RuntimeValue::Dict(outer))
+            });
+        }
     }
 }
 
@@ -188,7 +257,10 @@ fn no_conn(func: &str) -> RuntimeError {
 fn str_arg(args: &[RuntimeValue], idx: usize, sig: &str) -> Result<String, RuntimeError> {
     match args.get(idx) {
         Some(RuntimeValue::String(s)) => Ok(s.clone()),
-        _ => Err(RuntimeError::type_error(format!("{}: expected string at position {}", sig, idx))),
+        _ => Err(RuntimeError::type_error(format!(
+            "{}: expected string at position {}",
+            sig, idx
+        ))),
     }
 }
 fn val_to_string(v: Option<&RuntimeValue>) -> Result<String, RuntimeError> {
@@ -199,14 +271,14 @@ fn val_to_string(v: Option<&RuntimeValue>) -> Result<String, RuntimeError> {
 }
 fn u32_arg(args: &[RuntimeValue], idx: usize) -> Option<u32> {
     match args.get(idx) {
-        Some(RuntimeValue::Int(n))   => Some(*n as u32),
+        Some(RuntimeValue::Int(n)) => Some(*n as u32),
         Some(RuntimeValue::Float(f)) => Some(*f as u32),
         _ => None,
     }
 }
 fn u64_arg(args: &[RuntimeValue], idx: usize) -> Option<u64> {
     match args.get(idx) {
-        Some(RuntimeValue::Int(n))   => Some(*n as u64),
+        Some(RuntimeValue::Int(n)) => Some(*n as u64),
         Some(RuntimeValue::Float(f)) => Some(*f as u64),
         _ => None,
     }

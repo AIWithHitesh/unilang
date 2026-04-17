@@ -75,25 +75,25 @@ pub fn register_all(vm: &mut VM) {
     vm.set_global("False", RuntimeValue::Bool(false));
 
     // File I/O extras
-    vm.register_builtin("write_file",  builtin_write_file);
-    vm.register_builtin("file_size",   builtin_file_size);
-    vm.register_builtin("list_dir",    builtin_list_dir);
+    vm.register_builtin("write_file", builtin_write_file);
+    vm.register_builtin("file_size", builtin_file_size);
+    vm.register_builtin("list_dir", builtin_list_dir);
 
     // Collection standalone helpers
-    vm.register_builtin("append",   builtin_append);
-    vm.register_builtin("keys",     builtin_keys);
-    vm.register_builtin("values",   builtin_values);
-    vm.register_builtin("has_key",  builtin_has_key);
+    vm.register_builtin("append", builtin_append);
+    vm.register_builtin("keys", builtin_keys);
+    vm.register_builtin("values", builtin_values);
+    vm.register_builtin("has_key", builtin_has_key);
 
     // Type utility
-    vm.register_builtin("type_of",  builtin_type);   // alias for type()
+    vm.register_builtin("type_of", builtin_type); // alias for type()
 
     // Time
-    vm.register_builtin("now",   builtin_now);
+    vm.register_builtin("now", builtin_now);
     vm.register_builtin("sleep", builtin_sleep);
 
     // Random
-    vm.register_builtin("random",     builtin_random);
+    vm.register_builtin("random", builtin_random);
     vm.register_builtin("random_int", builtin_random_int);
 
     // Environment
@@ -101,9 +101,9 @@ pub fn register_all(vm: &mut VM) {
     vm.register_builtin("env_set", builtin_env_set);
 
     // HTTP client
-    vm.register_builtin("http_get",    builtin_http_get);
-    vm.register_builtin("http_post",   builtin_http_post);
-    vm.register_builtin("http_put",    builtin_http_put);
+    vm.register_builtin("http_get", builtin_http_get);
+    vm.register_builtin("http_post", builtin_http_post);
+    vm.register_builtin("http_put", builtin_http_put);
     vm.register_builtin("http_delete", builtin_http_delete);
 
     // HTTP server — handled specially in VM::call_builtin (needs &mut self)
@@ -269,18 +269,28 @@ fn builtin_hash(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
 }
 
 fn builtin_id(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
-    let val = args.first().ok_or_else(|| RuntimeError::type_error("id() requires 1 argument"))?;
+    let val = args
+        .first()
+        .ok_or_else(|| RuntimeError::type_error("id() requires 1 argument"))?;
     // Return a stable integer representation.
     let id = match val {
         RuntimeValue::Int(n) => *n,
-        RuntimeValue::Bool(b) => if *b { 1 } else { 0 },
+        RuntimeValue::Bool(b) => {
+            if *b {
+                1
+            } else {
+                0
+            }
+        }
         _ => 0,
     };
     Ok(RuntimeValue::Int(id))
 }
 
 fn builtin_sum(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
-    let val = args.first().ok_or_else(|| RuntimeError::type_error("sum() requires 1 argument"))?;
+    let val = args
+        .first()
+        .ok_or_else(|| RuntimeError::type_error("sum() requires 1 argument"))?;
     match val {
         RuntimeValue::List(items) => {
             let mut total_int: i64 = 0;
@@ -288,9 +298,20 @@ fn builtin_sum(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
             let mut has_float = false;
             for item in items {
                 match item {
-                    RuntimeValue::Int(n) => { total_int += n; total_float += *n as f64; }
-                    RuntimeValue::Float(f) => { total_float += f; has_float = true; }
-                    _ => return Err(RuntimeError::type_error(format!("sum() element '{}' is not numeric", item))),
+                    RuntimeValue::Int(n) => {
+                        total_int += n;
+                        total_float += *n as f64;
+                    }
+                    RuntimeValue::Float(f) => {
+                        total_float += f;
+                        has_float = true;
+                    }
+                    _ => {
+                        return Err(RuntimeError::type_error(format!(
+                            "sum() element '{}' is not numeric",
+                            item
+                        )))
+                    }
                 }
             }
             if has_float {
@@ -304,7 +325,9 @@ fn builtin_sum(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
 }
 
 fn builtin_any(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
-    let val = args.first().ok_or_else(|| RuntimeError::type_error("any() requires 1 argument"))?;
+    let val = args
+        .first()
+        .ok_or_else(|| RuntimeError::type_error("any() requires 1 argument"))?;
     match val {
         RuntimeValue::List(items) => Ok(RuntimeValue::Bool(items.iter().any(|v| v.is_truthy()))),
         _ => Err(RuntimeError::type_error("any() requires a list")),
@@ -312,7 +335,9 @@ fn builtin_any(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
 }
 
 fn builtin_all(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
-    let val = args.first().ok_or_else(|| RuntimeError::type_error("all() requires 1 argument"))?;
+    let val = args
+        .first()
+        .ok_or_else(|| RuntimeError::type_error("all() requires 1 argument"))?;
     match val {
         RuntimeValue::List(items) => Ok(RuntimeValue::Bool(items.iter().all(|v| v.is_truthy()))),
         _ => Err(RuntimeError::type_error("all() requires a list")),
@@ -320,20 +345,32 @@ fn builtin_all(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
 }
 
 fn builtin_chr(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
-    let n = args.first().and_then(|v| v.as_int())
+    let n = args
+        .first()
+        .and_then(|v| v.as_int())
         .ok_or_else(|| RuntimeError::type_error("chr() requires an integer argument"))?;
-    let c = char::from_u32(n as u32)
-        .ok_or_else(|| RuntimeError::type_error(format!("chr() argument {} is not a valid Unicode code point", n)))?;
+    let c = char::from_u32(n as u32).ok_or_else(|| {
+        RuntimeError::type_error(format!(
+            "chr() argument {} is not a valid Unicode code point",
+            n
+        ))
+    })?;
     Ok(RuntimeValue::String(c.to_string()))
 }
 
 fn builtin_ord(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
-    let s = args.first().and_then(|v| v.as_string())
+    let s = args
+        .first()
+        .and_then(|v| v.as_string())
         .ok_or_else(|| RuntimeError::type_error("ord() requires a string argument"))?;
     let mut chars = s.chars();
-    let c = chars.next().ok_or_else(|| RuntimeError::type_error("ord() argument is an empty string"))?;
+    let c = chars
+        .next()
+        .ok_or_else(|| RuntimeError::type_error("ord() argument is an empty string"))?;
     if chars.next().is_some() {
-        return Err(RuntimeError::type_error("ord() expects a single character, not a multi-character string"));
+        return Err(RuntimeError::type_error(
+            "ord() expects a single character, not a multi-character string",
+        ));
     }
     Ok(RuntimeValue::Int(c as i64))
 }
@@ -342,13 +379,18 @@ fn builtin_list(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     match args.first() {
         None => Ok(RuntimeValue::List(Vec::new())),
         Some(RuntimeValue::List(items)) => Ok(RuntimeValue::List(items.clone())),
-        Some(RuntimeValue::String(s)) => {
-            Ok(RuntimeValue::List(s.chars().map(|c| RuntimeValue::String(c.to_string())).collect()))
-        }
-        Some(RuntimeValue::Dict(pairs)) => {
-            Ok(RuntimeValue::List(pairs.iter().map(|(k, _)| k.clone()).collect()))
-        }
-        Some(other) => Err(RuntimeError::type_error(format!("list() cannot convert '{}'", other))),
+        Some(RuntimeValue::String(s)) => Ok(RuntimeValue::List(
+            s.chars()
+                .map(|c| RuntimeValue::String(c.to_string()))
+                .collect(),
+        )),
+        Some(RuntimeValue::Dict(pairs)) => Ok(RuntimeValue::List(
+            pairs.iter().map(|(k, _)| k.clone()).collect(),
+        )),
+        Some(other) => Err(RuntimeError::type_error(format!(
+            "list() cannot convert '{}'",
+            other
+        ))),
     }
 }
 
@@ -364,21 +406,31 @@ fn builtin_dict(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
                     RuntimeValue::List(pair) if pair.len() >= 2 => {
                         pairs.push((pair[0].clone(), pair[1].clone()));
                     }
-                    _ => return Err(RuntimeError::type_error("dict() list must contain [key, value] pairs")),
+                    _ => {
+                        return Err(RuntimeError::type_error(
+                            "dict() list must contain [key, value] pairs",
+                        ))
+                    }
                 }
             }
             Ok(RuntimeValue::Dict(pairs))
         }
-        Some(other) => Err(RuntimeError::type_error(format!("dict() cannot convert '{}'", other))),
+        Some(other) => Err(RuntimeError::type_error(format!(
+            "dict() cannot convert '{}'",
+            other
+        ))),
     }
 }
 
 fn builtin_format(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     if args.is_empty() {
-        return Err(RuntimeError::type_error("format() requires at least 1 argument"));
+        return Err(RuntimeError::type_error(
+            "format() requires at least 1 argument",
+        ));
     }
     // Simple positional format: format("{} + {} = {}", a, b, c)
-    let template = args[0].as_string()
+    let template = args[0]
+        .as_string()
         .ok_or_else(|| RuntimeError::type_error("format() first argument must be a string"))?
         .to_string();
     let mut result = String::new();
@@ -405,7 +457,11 @@ fn builtin_format(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
 fn builtin_read_file(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     let path = match args.first() {
         Some(RuntimeValue::String(s)) => s.clone(),
-        _ => return Err(RuntimeError::type_error("read_file() requires a string path")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "read_file() requires a string path",
+            ))
+        }
     };
     match std::fs::read_to_string(&path) {
         Ok(content) => Ok(RuntimeValue::String(content)),
@@ -419,18 +475,28 @@ fn builtin_read_file(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError
 fn builtin_file_exists(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     let path = match args.first() {
         Some(RuntimeValue::String(s)) => s.clone(),
-        _ => return Err(RuntimeError::type_error("file_exists() requires a string path")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "file_exists() requires a string path",
+            ))
+        }
     };
     Ok(RuntimeValue::Bool(std::path::Path::new(&path).exists()))
 }
 
 fn builtin_write_file(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     if args.len() < 2 {
-        return Err(RuntimeError::type_error("write_file(path, content) requires 2 arguments"));
+        return Err(RuntimeError::type_error(
+            "write_file(path, content) requires 2 arguments",
+        ));
     }
     let path = match &args[0] {
         RuntimeValue::String(s) => s.clone(),
-        _ => return Err(RuntimeError::type_error("write_file(): path must be a string")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "write_file(): path must be a string",
+            ))
+        }
     };
     let content = match &args[1] {
         RuntimeValue::String(s) => s.clone(),
@@ -444,7 +510,11 @@ fn builtin_write_file(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeErro
 fn builtin_file_size(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     let path = match args.first() {
         Some(RuntimeValue::String(s)) => s.clone(),
-        _ => return Err(RuntimeError::type_error("file_size() requires a string path")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "file_size() requires a string path",
+            ))
+        }
     };
     let meta = std::fs::metadata(&path)
         .map_err(|e| RuntimeError::type_error(format!("file_size('{}') failed: {}", path, e)))?;
@@ -454,7 +524,11 @@ fn builtin_file_size(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError
 fn builtin_list_dir(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     let path = match args.first() {
         Some(RuntimeValue::String(s)) => s.clone(),
-        _ => return Err(RuntimeError::type_error("list_dir() requires a string path")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "list_dir() requires a string path",
+            ))
+        }
     };
     let entries = std::fs::read_dir(&path)
         .map_err(|e| RuntimeError::type_error(format!("list_dir('{}') failed: {}", path, e)))?;
@@ -469,7 +543,9 @@ fn builtin_list_dir(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError>
 
 fn builtin_append(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     if args.len() < 2 {
-        return Err(RuntimeError::type_error("append(list, item) requires 2 arguments"));
+        return Err(RuntimeError::type_error(
+            "append(list, item) requires 2 arguments",
+        ));
     }
     match &args[0] {
         RuntimeValue::List(items) => {
@@ -477,37 +553,45 @@ fn builtin_append(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
             out.push(args[1].clone());
             Ok(RuntimeValue::List(out))
         }
-        _ => Err(RuntimeError::type_error("append(): first argument must be a list")),
+        _ => Err(RuntimeError::type_error(
+            "append(): first argument must be a list",
+        )),
     }
 }
 
 fn builtin_keys(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     match args.first() {
-        Some(RuntimeValue::Dict(pairs)) => {
-            Ok(RuntimeValue::List(pairs.iter().map(|(k, _)| k.clone()).collect()))
-        }
+        Some(RuntimeValue::Dict(pairs)) => Ok(RuntimeValue::List(
+            pairs.iter().map(|(k, _)| k.clone()).collect(),
+        )),
         _ => Err(RuntimeError::type_error("keys() requires a dict argument")),
     }
 }
 
 fn builtin_values(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     match args.first() {
-        Some(RuntimeValue::Dict(pairs)) => {
-            Ok(RuntimeValue::List(pairs.iter().map(|(_, v)| v.clone()).collect()))
-        }
-        _ => Err(RuntimeError::type_error("values() requires a dict argument")),
+        Some(RuntimeValue::Dict(pairs)) => Ok(RuntimeValue::List(
+            pairs.iter().map(|(_, v)| v.clone()).collect(),
+        )),
+        _ => Err(RuntimeError::type_error(
+            "values() requires a dict argument",
+        )),
     }
 }
 
 fn builtin_has_key(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     if args.len() < 2 {
-        return Err(RuntimeError::type_error("has_key(dict, key) requires 2 arguments"));
+        return Err(RuntimeError::type_error(
+            "has_key(dict, key) requires 2 arguments",
+        ));
     }
     match &args[0] {
         RuntimeValue::Dict(pairs) => {
             Ok(RuntimeValue::Bool(pairs.iter().any(|(k, _)| k == &args[1])))
         }
-        _ => Err(RuntimeError::type_error("has_key(): first argument must be a dict")),
+        _ => Err(RuntimeError::type_error(
+            "has_key(): first argument must be a dict",
+        )),
     }
 }
 
@@ -555,14 +639,24 @@ fn builtin_random(_args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> 
 fn builtin_random_int(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     let lo = match args.first() {
         Some(RuntimeValue::Int(n)) => *n,
-        _ => return Err(RuntimeError::type_error("random_int(min, max) requires integer arguments")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "random_int(min, max) requires integer arguments",
+            ))
+        }
     };
     let hi = match args.get(1) {
         Some(RuntimeValue::Int(n)) => *n,
-        _ => return Err(RuntimeError::type_error("random_int(min, max) requires integer arguments")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "random_int(min, max) requires integer arguments",
+            ))
+        }
     };
     if hi < lo {
-        return Err(RuntimeError::type_error("random_int(min, max): max must be >= min"));
+        return Err(RuntimeError::type_error(
+            "random_int(min, max): max must be >= min",
+        ));
     }
     use std::time::{SystemTime, UNIX_EPOCH};
     let seed = SystemTime::now()
@@ -582,7 +676,11 @@ fn builtin_random_int(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeErro
 fn builtin_env_get(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     let name = match args.first() {
         Some(RuntimeValue::String(s)) => s.clone(),
-        _ => return Err(RuntimeError::type_error("env_get(name) requires a string argument")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "env_get(name) requires a string argument",
+            ))
+        }
     };
     match std::env::var(&name) {
         Ok(val) => Ok(RuntimeValue::String(val)),
@@ -592,7 +690,9 @@ fn builtin_env_get(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> 
 
 fn builtin_env_set(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     if args.len() < 2 {
-        return Err(RuntimeError::type_error("env_set(name, value) requires 2 arguments"));
+        return Err(RuntimeError::type_error(
+            "env_set(name, value) requires 2 arguments",
+        ));
     }
     let name = match &args[0] {
         RuntimeValue::String(s) => s.clone(),
@@ -610,16 +710,29 @@ fn builtin_env_set(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> 
 
 fn http_response_to_dict(status: u16, body: String) -> RuntimeValue {
     RuntimeValue::Dict(vec![
-        (RuntimeValue::String("status".into()),  RuntimeValue::Int(status as i64)),
-        (RuntimeValue::String("body".into()),    RuntimeValue::String(body)),
-        (RuntimeValue::String("ok".into()),      RuntimeValue::Bool(status < 400)),
+        (
+            RuntimeValue::String("status".into()),
+            RuntimeValue::Int(status as i64),
+        ),
+        (
+            RuntimeValue::String("body".into()),
+            RuntimeValue::String(body),
+        ),
+        (
+            RuntimeValue::String("ok".into()),
+            RuntimeValue::Bool(status < 400),
+        ),
     ])
 }
 
 fn builtin_http_get(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     let url = match args.first() {
         Some(RuntimeValue::String(s)) => s.clone(),
-        _ => return Err(RuntimeError::type_error("http_get(url) requires a string URL")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "http_get(url) requires a string URL",
+            ))
+        }
     };
     match ureq::get(&url).call() {
         Ok(resp) => {
@@ -631,17 +744,26 @@ fn builtin_http_get(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError>
             let body = resp.into_string().unwrap_or_default();
             Ok(http_response_to_dict(code, body))
         }
-        Err(e) => Err(RuntimeError::type_error(format!("http_get('{}') failed: {}", url, e))),
+        Err(e) => Err(RuntimeError::type_error(format!(
+            "http_get('{}') failed: {}",
+            url, e
+        ))),
     }
 }
 
 fn builtin_http_post(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     if args.len() < 2 {
-        return Err(RuntimeError::type_error("http_post(url, body) requires 2 arguments"));
+        return Err(RuntimeError::type_error(
+            "http_post(url, body) requires 2 arguments",
+        ));
     }
     let url = match &args[0] {
         RuntimeValue::String(s) => s.clone(),
-        _ => return Err(RuntimeError::type_error("http_post(): url must be a string")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "http_post(): url must be a string",
+            ))
+        }
     };
     let body = match &args[1] {
         RuntimeValue::String(s) => s.clone(),
@@ -662,13 +784,18 @@ fn builtin_http_post(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError
             let b = resp.into_string().unwrap_or_default();
             Ok(http_response_to_dict(code, b))
         }
-        Err(e) => Err(RuntimeError::type_error(format!("http_post('{}') failed: {}", url, e))),
+        Err(e) => Err(RuntimeError::type_error(format!(
+            "http_post('{}') failed: {}",
+            url, e
+        ))),
     }
 }
 
 fn builtin_http_put(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     if args.len() < 2 {
-        return Err(RuntimeError::type_error("http_put(url, body) requires 2 arguments"));
+        return Err(RuntimeError::type_error(
+            "http_put(url, body) requires 2 arguments",
+        ));
     }
     let url = match &args[0] {
         RuntimeValue::String(s) => s.clone(),
@@ -693,14 +820,21 @@ fn builtin_http_put(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError>
             let b = resp.into_string().unwrap_or_default();
             Ok(http_response_to_dict(code, b))
         }
-        Err(e) => Err(RuntimeError::type_error(format!("http_put('{}') failed: {}", url, e))),
+        Err(e) => Err(RuntimeError::type_error(format!(
+            "http_put('{}') failed: {}",
+            url, e
+        ))),
     }
 }
 
 fn builtin_http_delete(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     let url = match args.first() {
         Some(RuntimeValue::String(s)) => s.clone(),
-        _ => return Err(RuntimeError::type_error("http_delete(url) requires a string URL")),
+        _ => {
+            return Err(RuntimeError::type_error(
+                "http_delete(url) requires a string URL",
+            ))
+        }
     };
     match ureq::delete(&url).call() {
         Ok(resp) => {
@@ -712,6 +846,9 @@ fn builtin_http_delete(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeErr
             let body = resp.into_string().unwrap_or_default();
             Ok(http_response_to_dict(code, body))
         }
-        Err(e) => Err(RuntimeError::type_error(format!("http_delete('{}') failed: {}", url, e))),
+        Err(e) => Err(RuntimeError::type_error(format!(
+            "http_delete('{}') failed: {}",
+            url, e
+        ))),
     }
 }
