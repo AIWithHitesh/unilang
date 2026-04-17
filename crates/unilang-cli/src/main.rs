@@ -126,6 +126,8 @@ enum Commands {
         #[command(subcommand)]
         action: ConfigAction,
     },
+    /// Generate unilang.lock from unilang.toml dependencies.
+    Lock,
 }
 
 /// Sub-commands for `unilang config`.
@@ -191,6 +193,7 @@ fn main() {
             ConfigAction::Show => project::cmd_config_show(),
             ConfigAction::Init => project::cmd_config_init(),
         },
+        Commands::Lock => project::cmd_lock_generate(),
     }
 }
 

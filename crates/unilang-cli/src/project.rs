@@ -139,6 +139,85 @@ pub fn load_project() -> (Project, Option<PathBuf>) {
     }
 }
 
+// ── Lock file ──────────────────────────────────────────────────────────────────
+
+/// A single locked dependency entry.
+#[derive(Debug, Clone)]
+pub struct LockedDep {
+    pub name: String,
+    pub version: String,
+    /// Deterministic pseudo-checksum: sha256("name@version") hex-encoded.
+    pub checksum: String,
+}
+
+/// Generate a `unilang.lock` file from the project's declared dependencies and
+/// write it next to `unilang.toml` (or in the current directory).
+///
+/// The lock file is a simple JSON document:
+/// ```json
+/// {
+///   "lock_version": 1,
+///   "locked": [
+///     { "name": "sqlite", "version": "1.0", "checksum": "sha256:..." }
+///   ]
+/// }
+/// ```
+pub fn cmd_lock_generate() {
+    let (proj, _) = load_project();
+
+    let locked: Vec<LockedDep> = {
+        let mut deps: Vec<_> = proj.dependencies.iter().collect();
+        deps.sort_by_key(|(k, _)| k.as_str());
+        deps.into_iter()
+            .map(|(name, version)| {
+                let checksum = pseudo_checksum(name, version);
+                LockedDep {
+                    name: name.clone(),
+                    version: version.clone(),
+                    checksum,
+                }
+            })
+            .collect()
+    };
+
+    let lock_path = std::env::current_dir()
+        .unwrap_or_else(|_| PathBuf::from("."))
+        .join("unilang.lock");
+
+    // Serialize to JSON manually (no serde_json dep required).
+    let mut json = String::from("{\n  \"lock_version\": 1,\n  \"locked\": [\n");
+    for (i, dep) in locked.iter().enumerate() {
+        let comma = if i + 1 < locked.len() { "," } else { "" };
+        json.push_str(&format!(
+            "    {{ \"name\": \"{}\", \"version\": \"{}\", \"checksum\": \"{}\" }}{}\n",
+            dep.name, dep.version, dep.checksum, comma
+        ));
+    }
+    json.push_str("  ]\n}\n");
+
+    match std::fs::write(&lock_path, &json) {
+        Ok(_) => {
+            println!("Generated {} ({} dep(s))", lock_path.display(), locked.len());
+            for dep in &locked {
+                println!("  {} @ {}", dep.name, dep.version);
+            }
+        }
+        Err(e) => {
+            eprintln!("error: cannot write '{}': {}", lock_path.display(), e);
+            std::process::exit(1);
+        }
+    }
+}
+
+/// Compute a pseudo-checksum for a dependency: "sha256:<hex(sha256(name@version))>".
+/// This is deterministic and stable across runs without a real registry.
+fn pseudo_checksum(name: &str, version: &str) -> String {
+    use sha2::{Digest, Sha256};
+    let input = format!("{}@{}", name, version);
+    let hash = hex::encode(Sha256::digest(input.as_bytes()));
+    format!("sha256:{}", hash)
+}
+
 // ── CLI commands ───────────────────────────────────────────────────────────────
 
 /// `unilang config show` — pretty-print the parsed `unilang.toml`.
