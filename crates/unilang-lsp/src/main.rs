@@ -8,7 +8,9 @@
 
 mod backend;
 mod completion;
+mod definition;
 mod diagnostics;
+mod formatting;
 mod hover;
 
 use backend::Backend;

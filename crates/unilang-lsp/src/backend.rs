@@ -13,7 +13,9 @@ use tower_lsp::lsp_types::*;
 use tower_lsp::{Client, LanguageServer};
 
 use crate::completion;
+use crate::definition;
 use crate::diagnostics;
+use crate::formatting;
 use crate::hover;
 
 /// Document state stored per open file.
@@ -59,6 +61,8 @@ impl LanguageServer for Backend {
                     TextDocumentSyncKind::FULL,
                 )),
                 hover_provider: Some(HoverProviderCapability::Simple(true)),
+                definition_provider: Some(OneOf::Left(true)),
+                document_formatting_provider: Some(OneOf::Left(true)),
                 completion_provider: Some(CompletionOptions {
                     resolve_provider: Some(false),
                     trigger_characters: Some(vec![".".to_string(), ":".to_string()]),
@@ -186,5 +190,42 @@ impl LanguageServer for Backend {
         let text = doc.rope.to_string();
         let items = completion::get_completions(&text, position);
         Ok(Some(CompletionResponse::Array(items)))
+    }
+
+    async fn goto_definition(
+        &self,
+        params: GotoDefinitionParams,
+    ) -> Result<Option<GotoDefinitionResponse>> {
+        let uri = params
+            .text_document_position_params
+            .text_document
+            .uri
+            .clone();
+        let position = params.text_document_position_params.position;
+
+        let docs = self.documents.read().await;
+        let doc = match docs.get(&uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let text = doc.rope.to_string();
+        Ok(definition::find_definition(&text, position, &uri))
+    }
+
+    async fn formatting(
+        &self,
+        params: DocumentFormattingParams,
+    ) -> Result<Option<Vec<TextEdit>>> {
+        let uri = params.text_document.uri;
+
+        let docs = self.documents.read().await;
+        let doc = match docs.get(&uri) {
+            Some(d) => d,
+            None => return Ok(None),
+        };
+
+        let text = doc.rope.to_string();
+        Ok(Some(formatting::format_document(&text)))
     }
 }

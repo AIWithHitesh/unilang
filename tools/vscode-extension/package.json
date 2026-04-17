@@ -15,10 +15,12 @@
   },
   "categories": [
     "Programming Languages",
-    "Snippets"
+    "Snippets",
+    "Debuggers"
   ],
   "activationEvents": [
-    "onLanguage:unilang"
+    "onLanguage:unilang",
+    "onDebug"
   ],
   "main": "./out/extension.js",
   "contributes": {
@@ -50,6 +52,34 @@
       {
         "language": "unilang",
         "path": "./snippets/unilang.snippets.json"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "unilang",
+        "label": "UniLang Debug",
+        "program": "./out/debugAdapter.js",
+        "runtime": "node",
+        "languages": ["unilang"],
+        "initialConfigurations": [
+          {
+            "type": "unilang",
+            "request": "launch",
+            "name": "Debug UniLang File",
+            "program": "${file}"
+          }
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": ["program"],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Path to the .uniL file to debug"
+              }
+            }
+          }
+        }
       }
     ]
   },

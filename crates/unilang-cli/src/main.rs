@@ -10,7 +10,14 @@
 //! - `unilang compile <file>` — lex, parse, compile, and print bytecode disassembly
 //! - `unilang run <file>`     — full pipeline: lex, parse, analyze, compile, execute
 
+mod build;
+mod formatter;
 mod init;
+mod linter;
+mod pack;
+mod project;
+mod repl;
+mod test_runner;
 
 use clap::{Parser, Subcommand};
 use std::fs;
@@ -80,6 +87,54 @@ enum Commands {
         #[command(subcommand)]
         action: DriverAction,
     },
+    /// Discover and run test_ functions in .uniL files.
+    Test {
+        /// File or directory to scan (default: current dir).
+        path: Option<String>,
+    },
+    /// Format .uniL source files.
+    Fmt {
+        /// File or directory to format (default: current dir).
+        path: Option<String>,
+        /// Write formatted output back to files instead of stdout.
+        #[arg(long)]
+        write: bool,
+    },
+    /// Run linting / style checks on .uniL files.
+    Lint {
+        /// File or directory to lint (default: current dir).
+        path: Option<String>,
+    },
+    /// Interactive read-eval-print loop.
+    Repl,
+    /// Bundle project into a .uniLpkg archive.
+    Pack {
+        /// Output file path (default: <name>-<version>.uniLpkg).
+        #[arg(long)]
+        out: Option<String>,
+    },
+    /// Compile a .uniL file without executing it.
+    Build {
+        /// Path to the .uniL source file.
+        file: String,
+        /// Enable incremental compilation cache.
+        #[arg(long)]
+        incremental: bool,
+    },
+    /// Show or initialise project configuration.
+    Config {
+        #[command(subcommand)]
+        action: ConfigAction,
+    },
+}
+
+/// Sub-commands for `unilang config`.
+#[derive(Subcommand)]
+enum ConfigAction {
+    /// Pretty-print the parsed unilang.toml.
+    Show,
+    /// Scaffold a new unilang.toml in the current directory.
+    Init,
 }
 
 /// Sub-commands for `unilang driver`.
@@ -117,6 +172,24 @@ fn main() {
         Commands::Driver { action } => match action {
             DriverAction::List => cmd_driver_list(),
             DriverAction::New { name, out } => cmd_driver_new(&name, out.as_deref()),
+        },
+        Commands::Test { path } => {
+            let code = test_runner::cmd_test(path.as_deref());
+            process::exit(code);
+        }
+        Commands::Fmt { path, write } => {
+            formatter::cmd_fmt(path.as_deref(), write);
+        }
+        Commands::Lint { path } => {
+            let code = linter::cmd_lint(path.as_deref());
+            process::exit(code);
+        }
+        Commands::Repl => repl::cmd_repl(),
+        Commands::Pack { out } => pack::cmd_pack(out.as_deref()),
+        Commands::Build { file, incremental } => build::cmd_build(&file, incremental),
+        Commands::Config { action } => match action {
+            ConfigAction::Show => project::cmd_config_show(),
+            ConfigAction::Init => project::cmd_config_init(),
         },
     }
 }

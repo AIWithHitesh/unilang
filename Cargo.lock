@@ -4958,6 +4958,9 @@ dependencies = [
  "clap",
  "console",
  "dialoguer",
+ "hex",
+ "serde_json",
+ "sha2 0.10.9",
  "unilang-codegen",
  "unilang-common",
  "unilang-drivers",
@@ -4966,6 +4969,8 @@ dependencies = [
  "unilang-runtime",
  "unilang-semantic",
  "unilang-stdlib",
+ "walkdir",
+ "zip",
 ]
 
 [[package]]
