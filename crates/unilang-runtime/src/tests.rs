@@ -476,15 +476,15 @@ fn test_concat() {
 
 #[test]
 fn test_runtime_int_plus_float() {
-    // 5 + 3.14 → 8.14
+    // 5 + 2.5 → 7.5
     let (_, result) = run_instructions(vec![
         Opcode::LoadConst(Value::Int(5)),
-        Opcode::LoadConst(Value::Float(3.14)),
+        Opcode::LoadConst(Value::Float(2.5)),
         Opcode::Add,
         Opcode::Halt,
     ]);
     match result.unwrap() {
-        RuntimeValue::Float(f) => assert!((f - 8.14).abs() < 1e-10),
+        RuntimeValue::Float(f) => assert!((f - 7.5).abs() < 1e-10),
         other => panic!("expected Float(8.14), got {:?}", other),
     }
 }
@@ -568,7 +568,7 @@ fn test_runtime_mixed_comparison() {
 #[test]
 fn test_coerce_to_int() {
     assert_eq!(RuntimeValue::Int(42).coerce_to_int().unwrap(), 42);
-    assert_eq!(RuntimeValue::Float(3.14).coerce_to_int().unwrap(), 3);
+    assert_eq!(RuntimeValue::Float(2.5).coerce_to_int().unwrap(), 2);
     assert_eq!(RuntimeValue::Bool(true).coerce_to_int().unwrap(), 1);
     assert_eq!(RuntimeValue::Null.coerce_to_int().unwrap(), 0);
     assert_eq!(
@@ -585,7 +585,7 @@ fn test_coerce_to_int() {
 #[test]
 fn test_coerce_to_float() {
     assert!((RuntimeValue::Int(5).coerce_to_float().unwrap() - 5.0).abs() < 1e-10);
-    assert!((RuntimeValue::Float(3.14).coerce_to_float().unwrap() - 3.14).abs() < 1e-10);
+    assert!((RuntimeValue::Float(2.5).coerce_to_float().unwrap() - 2.5).abs() < 1e-10);
     assert!((RuntimeValue::Bool(true).coerce_to_float().unwrap() - 1.0).abs() < 1e-10);
     assert!((RuntimeValue::Null.coerce_to_float().unwrap() - 0.0).abs() < 1e-10);
 }
@@ -593,7 +593,7 @@ fn test_coerce_to_float() {
 #[test]
 fn test_coerce_to_string() {
     assert_eq!(RuntimeValue::Int(42).coerce_to_string(), "42");
-    assert_eq!(RuntimeValue::Float(3.14).coerce_to_string(), "3.14");
+    assert_eq!(RuntimeValue::Float(2.5).coerce_to_string(), "2.5");
     assert_eq!(RuntimeValue::Bool(true).coerce_to_string(), "True");
     assert_eq!(RuntimeValue::Null.coerce_to_string(), "None");
     assert_eq!(

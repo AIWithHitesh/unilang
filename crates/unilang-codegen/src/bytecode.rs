@@ -155,6 +155,8 @@ pub struct Function {
 #[derive(Debug, Clone)]
 pub struct ClassDef {
     pub name: String,
+    /// Optional parent class name (single inheritance).
+    pub parent: Option<String>,
     /// Indices into the `Bytecode::functions` table.
     pub methods: Vec<usize>,
     pub fields: Vec<String>,

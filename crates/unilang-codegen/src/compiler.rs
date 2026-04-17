@@ -396,9 +396,32 @@ impl Compiler {
             }
         }
 
+        // Extract parent class name: Python-style `class Foo(Bar):` uses `bases`,
+        // Java-style `class Foo extends Bar` uses `extends`.
+        let parent_name: Option<String> = decl
+            .bases
+            .first()
+            .and_then(|base| {
+                if let TypeExpr::Named(n) = &base.node {
+                    Some(n.clone())
+                } else {
+                    None
+                }
+            })
+            .or_else(|| {
+                decl.extends.as_ref().and_then(|ext| {
+                    if let TypeExpr::Named(n) = &ext.node {
+                        Some(n.clone())
+                    } else {
+                        None
+                    }
+                })
+            });
+
         let class_name = decl.name.node.clone();
         self.classes.push(ClassDef {
             name: class_name.clone(),
+            parent: parent_name,
             methods: method_indices,
             fields,
         });
@@ -721,32 +744,86 @@ impl Compiler {
                 self.compile_expr(&lhs.node);
                 self.compile_expr(&rhs.node);
                 match op {
-                    BinOp::Add => { self.emit(Opcode::Add); }
-                    BinOp::Sub => { self.emit(Opcode::Sub); }
-                    BinOp::Mul => { self.emit(Opcode::Mul); }
-                    BinOp::Div => { self.emit(Opcode::Div); }
-                    BinOp::FloorDiv => { self.emit(Opcode::FloorDiv); }
-                    BinOp::Mod => { self.emit(Opcode::Mod); }
-                    BinOp::Pow => { self.emit(Opcode::Pow); }
-                    BinOp::Eq => { self.emit(Opcode::Eq); }
-                    BinOp::NotEq => { self.emit(Opcode::NotEq); }
-                    BinOp::Lt => { self.emit(Opcode::Lt); }
-                    BinOp::Gt => { self.emit(Opcode::Gt); }
-                    BinOp::LtEq => { self.emit(Opcode::LtEq); }
-                    BinOp::GtEq => { self.emit(Opcode::GtEq); }
-                    BinOp::And => { self.emit(Opcode::And); }
-                    BinOp::Or => { self.emit(Opcode::Or); }
-                    BinOp::BitAnd => { self.emit(Opcode::BitAnd); }
-                    BinOp::BitOr => { self.emit(Opcode::BitOr); }
-                    BinOp::BitXor => { self.emit(Opcode::BitXor); }
-                    BinOp::LShift => { self.emit(Opcode::LShift); }
-                    BinOp::RShift => { self.emit(Opcode::RShift); }
-                    BinOp::UnsignedRShift => { self.emit(Opcode::RShift); }
-                    BinOp::In => { self.emit(Opcode::Contains); }
-                    BinOp::NotIn => { self.emit(Opcode::Contains); self.emit(Opcode::Not); }
-                    BinOp::Is => { self.emit(Opcode::Eq); }
-                    BinOp::IsNot => { self.emit(Opcode::Eq); self.emit(Opcode::Not); }
-                    BinOp::Instanceof => { self.emit(Opcode::Eq); }
+                    BinOp::Add => {
+                        self.emit(Opcode::Add);
+                    }
+                    BinOp::Sub => {
+                        self.emit(Opcode::Sub);
+                    }
+                    BinOp::Mul => {
+                        self.emit(Opcode::Mul);
+                    }
+                    BinOp::Div => {
+                        self.emit(Opcode::Div);
+                    }
+                    BinOp::FloorDiv => {
+                        self.emit(Opcode::FloorDiv);
+                    }
+                    BinOp::Mod => {
+                        self.emit(Opcode::Mod);
+                    }
+                    BinOp::Pow => {
+                        self.emit(Opcode::Pow);
+                    }
+                    BinOp::Eq => {
+                        self.emit(Opcode::Eq);
+                    }
+                    BinOp::NotEq => {
+                        self.emit(Opcode::NotEq);
+                    }
+                    BinOp::Lt => {
+                        self.emit(Opcode::Lt);
+                    }
+                    BinOp::Gt => {
+                        self.emit(Opcode::Gt);
+                    }
+                    BinOp::LtEq => {
+                        self.emit(Opcode::LtEq);
+                    }
+                    BinOp::GtEq => {
+                        self.emit(Opcode::GtEq);
+                    }
+                    BinOp::And => {
+                        self.emit(Opcode::And);
+                    }
+                    BinOp::Or => {
+                        self.emit(Opcode::Or);
+                    }
+                    BinOp::BitAnd => {
+                        self.emit(Opcode::BitAnd);
+                    }
+                    BinOp::BitOr => {
+                        self.emit(Opcode::BitOr);
+                    }
+                    BinOp::BitXor => {
+                        self.emit(Opcode::BitXor);
+                    }
+                    BinOp::LShift => {
+                        self.emit(Opcode::LShift);
+                    }
+                    BinOp::RShift => {
+                        self.emit(Opcode::RShift);
+                    }
+                    BinOp::UnsignedRShift => {
+                        self.emit(Opcode::RShift);
+                    }
+                    BinOp::In => {
+                        self.emit(Opcode::Contains);
+                    }
+                    BinOp::NotIn => {
+                        self.emit(Opcode::Contains);
+                        self.emit(Opcode::Not);
+                    }
+                    BinOp::Is => {
+                        self.emit(Opcode::Eq);
+                    }
+                    BinOp::IsNot => {
+                        self.emit(Opcode::Eq);
+                        self.emit(Opcode::Not);
+                    }
+                    BinOp::Instanceof => {
+                        self.emit(Opcode::Eq);
+                    }
                     BinOp::NullCoalesce => unreachable!(),
                 };
             }
@@ -865,21 +942,21 @@ impl Compiler {
                 if let Expr::Index(obj, index) = &target.node {
                     // Index assignment: a[i] = v
                     // SetIndex expects stack: [collection, index, value] (bottom to top)
-                    self.compile_expr(&obj.node);     // push collection
-                    self.compile_expr(&index.node);   // push index
-                    self.compile_expr(&value.node);   // push value
-                    self.emit(Opcode::SetIndex);       // pops value, index, collection; pushes modified collection
-                    // Store the modified collection back to its source variable.
+                    self.compile_expr(&obj.node); // push collection
+                    self.compile_expr(&index.node); // push index
+                    self.compile_expr(&value.node); // push value
+                    self.emit(Opcode::SetIndex); // pops value, index, collection; pushes modified collection
+                                                 // Store the modified collection back to its source variable.
                     self.store_back_to_source(&obj.node);
                     // Push Null as the expression result.
                     self.emit(Opcode::LoadConst(Value::Null));
                 } else if let Expr::Attribute(obj_expr, attr) = &target.node {
                     // Attribute assignment: obj.attr = value
                     // SetAttr expects stack: [obj, value] (bottom to top): pops value first, then obj
-                    self.compile_expr(&obj_expr.node);              // push obj
-                    self.compile_expr(&value.node);                 // push value
-                    self.emit(Opcode::SetAttr(attr.node.clone()));  // pops value, pops obj, pushes modified obj
-                    // Store modified obj back to its source variable (e.g. 'this' or any named var).
+                    self.compile_expr(&obj_expr.node); // push obj
+                    self.compile_expr(&value.node); // push value
+                    self.emit(Opcode::SetAttr(attr.node.clone())); // pops value, pops obj, pushes modified obj
+                                                                   // Store modified obj back to its source variable (e.g. 'this' or any named var).
                     self.store_back_to_source(&obj_expr.node);
                     // Leave the assigned value on stack as the expression result.
                     self.compile_expr(&value.node);
@@ -1091,12 +1168,12 @@ impl Compiler {
                 // Use a temp slot to avoid stack ordering issues.
                 let temp_slot = self.define_local("__nested_tmp__");
                 self.emit(Opcode::StoreLocal(temp_slot)); // save modified inner value
-                // Compile outer assignment: parent[index] = modified_value
-                self.compile_expr(&parent.node);        // push parent collection
-                self.compile_expr(&index.node);          // push index
+                                                          // Compile outer assignment: parent[index] = modified_value
+                self.compile_expr(&parent.node); // push parent collection
+                self.compile_expr(&index.node); // push index
                 self.emit(Opcode::LoadLocal(temp_slot)); // push saved modified value
-                self.emit(Opcode::SetIndex);              // pops value, index, parent; pushes modified parent
-                // Recursively store back to parent's source
+                self.emit(Opcode::SetIndex); // pops value, index, parent; pushes modified parent
+                                             // Recursively store back to parent's source
                 self.store_back_to_source(&parent.node);
             }
             _ => {

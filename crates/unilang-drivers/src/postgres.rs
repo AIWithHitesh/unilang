@@ -25,19 +25,31 @@ pub struct PostgresDriver {
 
 impl PostgresDriver {
     pub fn new() -> Self {
-        Self { client: Arc::new(Mutex::new(None)) }
+        Self {
+            client: Arc::new(Mutex::new(None)),
+        }
     }
 }
 
 impl Default for PostgresDriver {
-    fn default() -> Self { Self::new() }
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl UniLangDriver for PostgresDriver {
-    fn name(&self) -> &str { "postgres" }
-    fn version(&self) -> &str { "1.0.0" }
-    fn description(&self) -> &str { "PostgreSQL via synchronous postgres crate" }
-    fn category(&self) -> DriverCategory { DriverCategory::SqlDatabase }
+    fn name(&self) -> &str {
+        "postgres"
+    }
+    fn version(&self) -> &str {
+        "1.0.0"
+    }
+    fn description(&self) -> &str {
+        "PostgreSQL via synchronous postgres crate"
+    }
+    fn category(&self) -> DriverCategory {
+        DriverCategory::SqlDatabase
+    }
     fn exported_functions(&self) -> &'static [&'static str] {
         &["pg_connect", "pg_query", "pg_exec", "pg_close"]
     }
@@ -59,25 +71,33 @@ impl UniLangDriver for PostgresDriver {
         {
             let client = Arc::clone(&self.client);
             vm.register_builtin("pg_query", move |args| {
-                let sql    = str_arg(args, 0, "pg_query(sql, params?)")?;
+                let sql = str_arg(args, 0, "pg_query(sql, params?)")?;
                 let params = build_pg_params(args, 1);
                 let mut guard = client.lock().unwrap();
                 let c = guard.as_mut().ok_or_else(|| no_conn("pg_query"))?;
-                let dyn_params: Vec<&(dyn postgres::types::ToSql + Sync)> =
-                    params.iter().map(|p| p as &(dyn postgres::types::ToSql + Sync)).collect();
-                let rows = c.query(&sql as &str, &dyn_params[..])
+                let dyn_params: Vec<&(dyn postgres::types::ToSql + Sync)> = params
+                    .iter()
+                    .map(|p| p as &(dyn postgres::types::ToSql + Sync))
+                    .collect();
+                let rows = c
+                    .query(&sql as &str, &dyn_params[..])
                     .map_err(|e| RuntimeError::type_error(format!("pg_query: {}", e)))?;
-                let result: Vec<RuntimeValue> = rows.iter().map(|row| {
-                    let cols = row.columns();
-                    let dict: Vec<(RuntimeValue, RuntimeValue)> = cols.iter().enumerate()
-                        .map(|(i, col)| {
-                            let key = RuntimeValue::String(col.name().to_string());
-                            let val = pg_col_to_runtime(row, i);
-                            (key, val)
-                        })
-                        .collect();
-                    RuntimeValue::Dict(dict)
-                }).collect();
+                let result: Vec<RuntimeValue> = rows
+                    .iter()
+                    .map(|row| {
+                        let cols = row.columns();
+                        let dict: Vec<(RuntimeValue, RuntimeValue)> = cols
+                            .iter()
+                            .enumerate()
+                            .map(|(i, col)| {
+                                let key = RuntimeValue::String(col.name().to_string());
+                                let val = pg_col_to_runtime(row, i);
+                                (key, val)
+                            })
+                            .collect();
+                        RuntimeValue::Dict(dict)
+                    })
+                    .collect();
                 Ok(RuntimeValue::List(result))
             });
         }
@@ -86,13 +106,16 @@ impl UniLangDriver for PostgresDriver {
         {
             let client = Arc::clone(&self.client);
             vm.register_builtin("pg_exec", move |args| {
-                let sql    = str_arg(args, 0, "pg_exec(sql, params?)")?;
+                let sql = str_arg(args, 0, "pg_exec(sql, params?)")?;
                 let params = build_pg_params(args, 1);
                 let mut guard = client.lock().unwrap();
                 let c = guard.as_mut().ok_or_else(|| no_conn("pg_exec"))?;
-                let dyn_params: Vec<&(dyn postgres::types::ToSql + Sync)> =
-                    params.iter().map(|p| p as &(dyn postgres::types::ToSql + Sync)).collect();
-                let affected = c.execute(&sql as &str, &dyn_params[..])
+                let dyn_params: Vec<&(dyn postgres::types::ToSql + Sync)> = params
+                    .iter()
+                    .map(|p| p as &(dyn postgres::types::ToSql + Sync))
+                    .collect();
+                let affected = c
+                    .execute(&sql as &str, &dyn_params[..])
                     .map_err(|e| RuntimeError::type_error(format!("pg_exec: {}", e)))?;
                 Ok(RuntimeValue::Int(affected as i64))
             });
@@ -118,12 +141,18 @@ fn no_conn(func: &str) -> RuntimeError {
 fn str_arg(args: &[RuntimeValue], idx: usize, sig: &str) -> Result<String, RuntimeError> {
     match args.get(idx) {
         Some(RuntimeValue::String(s)) => Ok(s.clone()),
-        _ => Err(RuntimeError::type_error(format!("{}: expected string at position {}", sig, idx))),
+        _ => Err(RuntimeError::type_error(format!(
+            "{}: expected string at position {}",
+            sig, idx
+        ))),
     }
 }
 
 /// Convert UniLang list params to Vec<Box<dyn ToSql + Sync>>.
-fn build_pg_params(args: &[RuntimeValue], idx: usize) -> Vec<Box<dyn postgres::types::ToSql + Sync>> {
+fn build_pg_params(
+    args: &[RuntimeValue],
+    idx: usize,
+) -> Vec<Box<dyn postgres::types::ToSql + Sync>> {
     match args.get(idx) {
         Some(RuntimeValue::List(items)) => items.iter().map(to_pg_boxed).collect(),
         _ => vec![],
@@ -132,12 +161,12 @@ fn build_pg_params(args: &[RuntimeValue], idx: usize) -> Vec<Box<dyn postgres::t
 
 fn to_pg_boxed(v: &RuntimeValue) -> Box<dyn postgres::types::ToSql + Sync> {
     match v {
-        RuntimeValue::Null      => Box::new(Option::<String>::None),
-        RuntimeValue::Bool(b)   => Box::new(*b),
-        RuntimeValue::Int(n)    => Box::new(*n),
-        RuntimeValue::Float(f)  => Box::new(*f),
+        RuntimeValue::Null => Box::new(Option::<String>::None),
+        RuntimeValue::Bool(b) => Box::new(*b),
+        RuntimeValue::Int(n) => Box::new(*n),
+        RuntimeValue::Float(f) => Box::new(*f),
         RuntimeValue::String(s) => Box::new(s.clone()),
-        other                   => Box::new(format!("{}", other)),
+        other => Box::new(format!("{}", other)),
     }
 }
 

@@ -53,6 +53,7 @@ fn var_decl(name: &str, init: Option<Expr>) -> Stmt {
     })
 }
 
+#[allow(dead_code)]
 fn empty_block() -> Block {
     Block {
         style: BlockStyle::Braces,

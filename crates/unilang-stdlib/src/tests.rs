@@ -359,7 +359,7 @@ fn test_type_bool() {
 #[test]
 fn test_type_float() {
     let mut vm = make_vm();
-    let result = call_builtin(&mut vm, "type", &[RuntimeValue::Float(3.14)]);
+    let result = call_builtin(&mut vm, "type", &[RuntimeValue::Float(2.5)]);
     assert_eq!(result, RuntimeValue::String("float".to_string()));
 }
 

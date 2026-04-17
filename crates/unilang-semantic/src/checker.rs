@@ -51,7 +51,7 @@ pub fn check_binary_op(
             }
         }
         BinOp::Sub | BinOp::Mul | BinOp::Div | BinOp::FloorDiv | BinOp::Mod | BinOp::Pow => {
-            let left_ok  = left.is_numeric()  || matches!(left,  Type::Dynamic | Type::Unknown);
+            let left_ok = left.is_numeric() || matches!(left, Type::Dynamic | Type::Unknown);
             let right_ok = right.is_numeric() || matches!(right, Type::Dynamic | Type::Unknown);
             if left_ok && right_ok {
                 Type::coercion_result(left, right)
