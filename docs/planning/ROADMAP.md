@@ -10,7 +10,7 @@
 ```
 Phase 0: Foundation        ██████████████████░░  [Mostly Complete]
 Phase 1: Core Compiler     ████████████████████  [Complete ✓]
-Phase 2: Runtime & VM      ██████████████████░░  [Mostly Complete]
+Phase 2: Runtime & VM      ████████████████████  [Complete ✓]
 Phase 3: Toolchain         ██████████░░░░░░░░░░  [In Progress]
 Phase 4: IDE & Ecosystem   ████████████░░░░░░░░  [In Progress]
 Phase 5: Production Ready  ░░░░░░░░░░░░░░░░░░░░
@@ -152,18 +152,18 @@ Phase 5: Production Ready  ░░░░░░░░░░░░░░░░░�
 | Memcached driver (`memcached_*`) | ✅ Done | Feature-gated (`memcached-driver`) |
 | Driver documentation | ✅ Done | `docs/DRIVERS.md` |
 
-### Milestone 2.5: JVM/CPython Bridge (Future — v2.0)
+### Milestone 2.5: JVM/CPython Bridge ✅ Complete
 
 | Task | Status | Notes |
 |------|--------|-------|
-| JNI bridge implementation | 🔲 Scaffolded | v2.0 — `crates/unilang-bridge/src/jvm.rs` (stubs ready) |
-| CPython C API bridge | 🔲 Scaffolded | v2.0 — `crates/unilang-bridge/src/cpython.rs` (stubs ready) |
-| Type marshaling (all types) | 🔲 Scaffolded | v2.0 — `crates/unilang-bridge/src/types.rs` (BridgeValue enum + stubs) |
-| Zero-copy array bridge | 🔲 TODO | v2.0 (NumPy ↔ Java arrays) |
-| Cross-VM exception handling | 🔲 Scaffolded | v2.0 — `BridgeError::CrossVmException` variant defined |
-| Bridge performance benchmarks | 🔲 TODO | Target: <1μs per call |
-| Java thread pool integration | 🔲 TODO | v2.0 |
-| Python `import` resolution | 🔲 TODO | v2.0 (PyPI packages) |
+| JNI bridge implementation | ✅ Done | `crates/unilang-bridge/src/jvm.rs` — `jni 0.21`; call_static, call_instance, import_class, load_jar, get_field, new_instance |
+| CPython C API bridge | ✅ Done | `crates/unilang-bridge/src/cpython.rs` — `pyo3 0.22`; import_module, call_function, call_method, get_attribute, eval, exec |
+| Type marshaling (all types) | ✅ Done | `crates/unilang-bridge/src/types.rs` — full RuntimeValue ↔ BridgeValue ↔ JValue/PyObject, no panics |
+| Zero-copy array bridge | ✅ Done | `crates/unilang-bridge/src/arrays.rs` — SharedArrayBuffer, JNI typed arrays, numpy buffer protocol |
+| Cross-VM exception handling | ✅ Done | JNI/PyErr → `BridgeError::CrossVmException { source, message }` in all bridge calls |
+| Bridge performance benchmarks | ✅ Done | `crates/unilang-bridge/benches/bridge_bench.rs` — Criterion: int/string/list/dict marshal + round-trips |
+| Java thread pool integration | ✅ Done | `crates/unilang-bridge/src/thread_pool.rs` — JavaThreadPool via ExecutorService (submit/await/shutdown) |
+| Python `import` resolution | ✅ Done | `CpythonBridge::add_to_sys_path` + `py_path_add` builtin — prepends path to `sys.path` for PyPI packages |
 
 **Exit Criteria:** Full end-to-end execution of real-world apps (DB + cache + HTTP + AI). ✅
 
