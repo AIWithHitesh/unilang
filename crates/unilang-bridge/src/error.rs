@@ -6,7 +6,7 @@
 use std::fmt;
 
 /// Errors that can occur during JVM or CPython bridge operations.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum BridgeError {
     /// The JVM bridge is not available (feature not enabled or JVM not installed).
     JvmNotAvailable(String),
@@ -21,6 +21,26 @@ pub enum BridgeError {
         /// Human-readable description of the exception.
         message: String,
     },
+}
+
+impl BridgeError {
+    /// Construct a `CrossVmException` from a JNI error (only compiled with `jvm` feature).
+    #[cfg(feature = "jvm")]
+    pub fn from_jni(err: jni::errors::Error) -> Self {
+        BridgeError::CrossVmException {
+            source: "JVM".to_string(),
+            message: err.to_string(),
+        }
+    }
+
+    /// Construct a `CrossVmException` from a pyo3 `PyErr` (only compiled with `cpython` feature).
+    #[cfg(feature = "cpython")]
+    pub fn from_pyo3(err: pyo3::PyErr) -> Self {
+        BridgeError::CrossVmException {
+            source: "CPython".to_string(),
+            message: err.to_string(),
+        }
+    }
 }
 
 impl fmt::Display for BridgeError {

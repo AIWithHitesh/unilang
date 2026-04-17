@@ -11,10 +11,17 @@ description = "JVM/CPython bridge for UniLang — type marshaling and cross-VM i
 
 [dependencies]
 unilang-runtime = { path = "../unilang-runtime" }
+jni  = { version = "0.21", default-features = false, optional = true }
+pyo3 = { version = "0.22", features = ["auto-initialize"], optional = true }
+
+[dev-dependencies]
+criterion = { version = "0.5", features = ["html_reports"] }
+
+[[bench]]
+name = "bridge_bench"
+harness = false
 
 [features]
 default = []
-# Enable JNI bridge (requires Java + jni crate)
-jvm = []
-# Enable CPython C API bridge (requires Python headers + pyo3 crate)
-cpython = []
+jvm     = ["dep:jni"]
+cpython = ["dep:pyo3"]
