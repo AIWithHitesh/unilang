@@ -579,6 +579,81 @@ fn parse_type_param_list(p: &mut Parser<'_>) -> Vec<Spanned<TypeExpr>> {
     params
 }
 
+/// Return true when the token stream looks like `Identifier ( ... ) {`,
+/// i.e. a Java-style constructor declaration without a return type.
+/// `lparen_offset` is the index of the `(` relative to the current position.
+fn has_block_after_paren_group(p: &Parser<'_>, lparen_offset: usize) -> bool {
+    let mut depth = 0usize;
+    let mut i = lparen_offset;
+    loop {
+        match p.peek_nth(i) {
+            TokenKind::LParen => depth += 1,
+            TokenKind::RParen => {
+                if depth == 1 {
+                    // Skip newlines/semicolons between `)` and `{`
+                    let mut j = i + 1;
+                    while matches!(
+                        p.peek_nth(j),
+                        TokenKind::Newline | TokenKind::Semicolon
+                    ) {
+                        j += 1;
+                    }
+                    return p.peek_nth(j) == TokenKind::LBrace;
+                }
+                depth = depth.saturating_sub(1);
+            }
+            TokenKind::Eof => return false,
+            _ => {}
+        }
+        i += 1;
+        if i > 256 {
+            return false; // guard against pathologically long param lists
+        }
+    }
+}
+
+/// Parse `ClassName(params) { body }` as a constructor FunctionDecl.
+fn parse_constructor_decl(p: &mut Parser<'_>) -> Spanned<Stmt> {
+    let name_span = p.expect(TokenKind::Identifier);
+    let name = p.source[name_span.start as usize..name_span.end as usize].to_string();
+
+    p.expect(TokenKind::LParen);
+    let params = parse_param_list(p);
+    p.expect(TokenKind::RParen);
+
+    let body = parse_block(p);
+    let end_span = body.statements.last().map(|s| s.span).unwrap_or(name_span);
+
+    Spanned::new(
+        Stmt::FunctionDecl(FunctionDecl {
+            name: Spanned::new(name, name_span),
+            params,
+            return_type: None,
+            body,
+            visibility: Visibility::Default,
+            modifiers: Vec::new(),
+            decorators: Vec::new(),
+            is_async: false,
+            syntax: SyntaxOrigin::Java,
+        }),
+        name_span.merge(end_span),
+    )
+}
+
+/// Parse one member inside a Java-style class body `{ ... }`.
+/// Handles the constructor pattern `ClassName(params) { body }` which
+/// `parse_stmt` would otherwise misparse as a call expression followed by
+/// a separate block.
+fn parse_class_member(p: &mut Parser<'_>) -> Spanned<Stmt> {
+    if p.peek_kind() == TokenKind::Identifier
+        && p.peek_nth(1) == TokenKind::LParen
+        && has_block_after_paren_group(p, 1)
+    {
+        return parse_constructor_decl(p);
+    }
+    parse_stmt(p)
+}
+
 fn parse_class_body(p: &mut Parser<'_>) -> (Vec<Spanned<Stmt>>, SyntaxOrigin) {
     let mut stmts = Vec::new();
 
@@ -588,7 +663,7 @@ fn parse_class_body(p: &mut Parser<'_>) -> (Vec<Spanned<Stmt>>, SyntaxOrigin) {
         p.skip_terminators();
         while !p.at(TokenKind::RBrace) && !p.at_eof() {
             let before = p.pos;
-            stmts.push(parse_stmt(p));
+            stmts.push(parse_class_member(p));
             p.skip_terminators();
             if p.pos == before {
                 p.advance(); // force progress to prevent infinite loop
