@@ -259,7 +259,7 @@ fn builtin_hash(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
         _ => {
             return Err(RuntimeError::type_error(format!(
                 "unhashable type: {}",
-                builtin_type(&[val.clone()])
+                builtin_type(std::slice::from_ref(val))
                     .map(|v| format!("{}", v))
                     .unwrap_or_default()
             )))
@@ -275,13 +275,7 @@ fn builtin_id(args: &[RuntimeValue]) -> Result<RuntimeValue, RuntimeError> {
     // Return a stable integer representation.
     let id = match val {
         RuntimeValue::Int(n) => *n,
-        RuntimeValue::Bool(b) => {
-            if *b {
-                1
-            } else {
-                0
-            }
-        }
+        RuntimeValue::Bool(b) => i64::from(*b),
         _ => 0,
     };
     Ok(RuntimeValue::Int(id))

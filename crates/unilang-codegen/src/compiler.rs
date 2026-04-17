@@ -380,9 +380,17 @@ impl Compiler {
                     self.locals = prev_locals;
                     self.local_slot = prev_slot;
 
+                    // A Java-style constructor has the same name as its class.
+                    // Normalise it to "__init__" so the VM's instantiation logic finds it.
+                    let fn_name = if method_decl.name.node == decl.name.node {
+                        "__init__".to_string()
+                    } else {
+                        method_decl.name.node.clone()
+                    };
+
                     let fn_index = self.functions.len();
                     self.functions.push(Function {
-                        name: method_decl.name.node.clone(),
+                        name: fn_name,
                         params: param_names,
                         code: fn_code,
                         local_count,
