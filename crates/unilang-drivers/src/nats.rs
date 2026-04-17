@@ -28,6 +28,7 @@ use unilang_runtime::vm::VM;
 use crate::{DriverCategory, UniLangDriver};
 
 #[cfg(feature = "nats-driver")]
+#[allow(deprecated)]
 struct NatsState {
     connection: nats::Connection,
     subscription: Option<nats::Subscription>,
@@ -97,6 +98,7 @@ impl UniLangDriver for NatsDriver {
     }
 
     #[cfg(feature = "nats-driver")]
+    #[allow(deprecated)]
     fn register(&self, vm: &mut VM) {
         use std::time::Duration;
 

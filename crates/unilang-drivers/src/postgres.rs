@@ -77,7 +77,7 @@ impl UniLangDriver for PostgresDriver {
                 let c = guard.as_mut().ok_or_else(|| no_conn("pg_query"))?;
                 let dyn_params: Vec<&(dyn postgres::types::ToSql + Sync)> = params
                     .iter()
-                    .map(|p| p as &(dyn postgres::types::ToSql + Sync))
+                    .map(|p| &**p as &(dyn postgres::types::ToSql + Sync))
                     .collect();
                 let rows = c
                     .query(&sql as &str, &dyn_params[..])
@@ -112,7 +112,7 @@ impl UniLangDriver for PostgresDriver {
                 let c = guard.as_mut().ok_or_else(|| no_conn("pg_exec"))?;
                 let dyn_params: Vec<&(dyn postgres::types::ToSql + Sync)> = params
                     .iter()
-                    .map(|p| p as &(dyn postgres::types::ToSql + Sync))
+                    .map(|p| &**p as &(dyn postgres::types::ToSql + Sync))
                     .collect();
                 let affected = c
                     .execute(&sql as &str, &dyn_params[..])

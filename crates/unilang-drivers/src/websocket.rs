@@ -241,7 +241,6 @@ impl UniLangDriver for WebSocketDriver {
             let running2 = Arc::clone(&running);
             let clients2 = Arc::clone(&clients);
             vm.register_builtin("ws_close", move |_args| {
-                use tungstenite::Message;
                 running2.store(false, Ordering::SeqCst);
                 let guard = clients2.lock().unwrap();
                 for ws_arc in guard.iter() {

@@ -1750,7 +1750,10 @@ version = "2.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f78e10609fe0e0b3f4157ffab1876319b5b0db102a2c60dc4626306dc46b44ad"
 dependencies = [
+ "fastrand 2.4.1",
  "futures-core",
+ "futures-io",
+ "parking",
  "pin-project-lite",
 ]
 
@@ -4994,6 +4997,7 @@ name = "unilang-drivers"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "futures-lite 2.6.1",
  "hex",
  "hmac 0.12.1",
  "lapin",
@@ -5014,6 +5018,18 @@ dependencies = [
  "unilang-runtime",
  "ureq",
  "webpki-roots 0.26.11",
+]
+
+[[package]]
+name = "unilang-e2e-tests"
+version = "0.1.0"
+dependencies = [
+ "unilang-codegen",
+ "unilang-common",
+ "unilang-parser",
+ "unilang-runtime",
+ "unilang-semantic",
+ "unilang-stdlib",
 ]
 
 [[package]]

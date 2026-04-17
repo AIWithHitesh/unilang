@@ -624,4 +624,114 @@ mod tests {
         let (_result, diags) = analyze(&module);
         assert!(has_no_errors(&diags));
     }
+
+    // ── Additional tests ───────────────────────────────────
+
+    #[test]
+    fn test_no_error_on_defined_function_call() {
+        // Calling a defined function with correct arity should not error.
+        let module = make_module(vec![
+            func_decl_stmt(
+                "greet",
+                vec![make_param("name", None)],
+                None,
+                vec![spanned(Stmt::Pass, 10, 14)],
+            ),
+            spanned(
+                Stmt::Expr(Expr::Call(
+                    Box::new(spanned(Expr::Ident("greet".to_string()), 60, 65)),
+                    vec![Argument {
+                        name: None,
+                        value: spanned(Expr::StringLit("Alice".to_string()), 66, 73),
+                    }],
+                )),
+                60,
+                74,
+            ),
+        ]);
+        let (_result, diags) = analyze(&module);
+        assert!(has_no_errors(&diags));
+    }
+
+    #[test]
+    fn test_calling_undefined_function_errors() {
+        let module = make_module(vec![spanned(
+            Stmt::Expr(Expr::Call(
+                Box::new(spanned(Expr::Ident("undefined_fn".to_string()), 0, 12)),
+                vec![],
+            )),
+            0,
+            14,
+        )]);
+        let (_result, diags) = analyze(&module);
+        assert!(has_error_containing(&diags, "undefined_fn"));
+    }
+
+    #[test]
+    fn test_basic_function_no_error() {
+        // def f(a, b): return a + b — should produce no errors
+        let module = make_module(vec![func_decl_stmt(
+            "f",
+            vec![make_param("a", None), make_param("b", None)],
+            None,
+            vec![spanned(
+                Stmt::Return(Some(spanned(
+                    Expr::BinaryOp(
+                        Box::new(spanned(Expr::Ident("a".to_string()), 20, 21)),
+                        BinOp::Add,
+                        Box::new(spanned(Expr::Ident("b".to_string()), 24, 25)),
+                    ),
+                    20,
+                    25,
+                ))),
+                18,
+                26,
+            )],
+        )]);
+        let (_result, diags) = analyze(&module);
+        assert!(has_no_errors(&diags));
+    }
+
+    #[test]
+    fn test_analyze_with_extra_builtins_no_error() {
+        // An extra builtin name should NOT produce "undefined variable" errors.
+        let module = make_module(vec![spanned(
+            Stmt::Expr(Expr::Call(
+                Box::new(spanned(
+                    Expr::Ident("community_driver_fn".to_string()),
+                    0,
+                    19,
+                )),
+                vec![],
+            )),
+            0,
+            21,
+        )]);
+        let (_result, diags) =
+            analyze_with_extra_builtins(&module, &["community_driver_fn".to_string()]);
+        assert!(has_no_errors(&diags));
+    }
+
+    #[test]
+    fn test_for_loop_variable_in_body() {
+        // for x in range(10): use x  — x should be in scope in the loop body
+        let range_call = Expr::Call(
+            Box::new(spanned(Expr::Ident("range".to_string()), 10, 15)),
+            vec![Argument {
+                name: None,
+                value: spanned(Expr::IntLit(10), 16, 18),
+            }],
+        );
+        let module = make_module(vec![spanned(
+            Stmt::For(ForStmt::ForIn {
+                target: spanned(Expr::Ident("x".to_string()), 4, 5),
+                iter: spanned(range_call, 9, 19),
+                body: block_with(vec![spanned(Stmt::Expr(Expr::Ident("x".to_string())), 22, 23)]),
+            }),
+            0,
+            24,
+        )]);
+        let (_result, diags) = analyze(&module);
+        assert!(has_no_errors(&diags));
+    }
 }

@@ -1,0 +1,10 @@
+nums = [5, 3, 8, 1, 9, 2, 7, 4, 6]
+
+print(len(nums))
+
+s = sorted(nums)
+print(s[0])
+print(s[len(s) - 1])
+
+r = reversed(nums)
+print(r[0])

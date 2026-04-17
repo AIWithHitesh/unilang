@@ -126,7 +126,7 @@ impl UniLangDriver for PrometheusDriver {
 
     #[cfg(feature = "prometheus-driver")]
     fn register(&self, vm: &mut VM) {
-        use prometheus::{CounterOpts, GaugeOpts, HistogramOpts};
+        use prometheus::{Opts, HistogramOpts};
 
         macro_rules! arc {
             () => {
@@ -145,7 +145,7 @@ impl UniLangDriver for PrometheusDriver {
                 if guard.metrics.contains_key(&name) {
                     return Ok(RuntimeValue::Bool(true));
                 }
-                let counter = Counter::with_opts(CounterOpts::new(name.clone(), help))
+                let counter = Counter::with_opts(Opts::new(name.clone(), help))
                     .map_err(|e| RuntimeError::type_error(format!("prom_counter: {}", e)))?;
                 guard
                     .registry
@@ -169,7 +169,7 @@ impl UniLangDriver for PrometheusDriver {
                 if guard.metrics.contains_key(&name) {
                     return Ok(RuntimeValue::Bool(true));
                 }
-                let gauge = Gauge::with_opts(GaugeOpts::new(name.clone(), help))
+                let gauge = Gauge::with_opts(Opts::new(name.clone(), help))
                     .map_err(|e| RuntimeError::type_error(format!("prom_gauge: {}", e)))?;
                 guard
                     .registry

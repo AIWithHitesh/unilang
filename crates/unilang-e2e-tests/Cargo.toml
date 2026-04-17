@@ -1,0 +1,19 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.
+
+[package]
+name = "unilang-e2e-tests"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "End-to-end integration tests for the UniLang compiler pipeline"
+publish = false
+
+[dev-dependencies]
+unilang-common = { path = "../unilang-common" }
+unilang-parser = { path = "../unilang-parser" }
+unilang-semantic = { path = "../unilang-semantic" }
+unilang-codegen = { path = "../unilang-codegen" }
+unilang-runtime = { path = "../unilang-runtime" }
+unilang-stdlib = { path = "../unilang-stdlib" }

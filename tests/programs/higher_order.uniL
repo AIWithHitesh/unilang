@@ -1,0 +1,20 @@
+def apply(f, x):
+    return f(x)
+
+def double(n):
+    return n * 2
+
+def square(n):
+    return n * n
+
+def negate(n):
+    return -n
+
+print(apply(double, 5))
+print(apply(square, 4))
+print(apply(negate, 7))
+
+def compose(f, g, x):
+    return f(g(x))
+
+print(compose(double, square, 3))

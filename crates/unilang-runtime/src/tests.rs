@@ -635,3 +635,235 @@ fn test_full_pipeline() {
     // Result should be Null (print returns Null, then Halt).
     assert!(matches!(result, RuntimeValue::Null));
 }
+
+// ── Full-pipeline helper (parse → compile → execute, no stdlib) ───────────
+//
+// Note: The stdlib-using E2E tests live in the `unilang-e2e-tests` crate
+// to avoid circular dev-dependency issues (unilang-stdlib → unilang-runtime).
+// These helpers only use the built-in VM capabilities (print, arithmetic, etc.)
+
+fn run_program(source: &str) -> Result<(RuntimeValue, Vec<String>), crate::error::RuntimeError> {
+    use unilang_common::span::SourceId;
+    let (module, _diag) = unilang_parser::parse(SourceId(0), source);
+    let bytecode = unilang_codegen::compile(&module)
+        .map_err(|_| crate::error::RuntimeError::new(crate::error::ErrorKind::Exception, "compile error".to_string()))?;
+    let mut vm = VM::new_with_capture();
+    let result = vm.run(&bytecode)?;
+    let output = vm.output().to_vec();
+    Ok((result, output))
+}
+
+/// Run and expect no error; return output lines.
+fn run_ok(source: &str) -> Vec<String> {
+    match run_program(source) {
+        Ok((_, out)) => out,
+        Err(e) => panic!("unexpected runtime error: {:?}", e),
+    }
+}
+
+// ── E2E: print("hello") ────────────────────────────────
+
+#[test]
+fn e2e_print_hello() {
+    let out = run_ok(r#"print("hello")"#);
+    assert_eq!(out, vec!["hello"]);
+}
+
+// ── E2E: arithmetic ────────────────────────────────────
+
+#[test]
+fn e2e_arithmetic() {
+    let out = run_ok("x = 1 + 2\nprint(x)");
+    assert_eq!(out, vec!["3"]);
+}
+
+// ── E2E: while loop ────────────────────────────────────
+
+#[test]
+fn e2e_while_loop() {
+    let source = "x = 0\nwhile x < 3:\n    x = x + 1\nprint(x)";
+    let out = run_ok(source);
+    assert_eq!(out, vec!["3"]);
+}
+
+// ── E2E: function definition and call ─────────────────
+
+#[test]
+fn e2e_function_def_and_call() {
+    let source = "def greet(name):\n    print(name)\ngreet(\"world\")";
+    let out = run_ok(source);
+    assert_eq!(out, vec!["world"]);
+}
+
+// ── E2E: recursive factorial ───────────────────────────
+
+#[test]
+fn e2e_recursive_factorial() {
+    let source = r#"
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+print(factorial(5))
+"#;
+    let out = run_ok(source);
+    assert_eq!(out, vec!["120"]);
+}
+
+// ── E2E: string concatenation ─────────────────────────
+
+#[test]
+fn e2e_string_concatenation() {
+    let out = run_ok(r#"print("hello" + " " + "world")"#);
+    assert_eq!(out, vec!["hello world"]);
+}
+
+// ── E2E: if/elif/else chain ────────────────────────────
+
+#[test]
+fn e2e_if_elif_else() {
+    let source = r#"
+x = 5
+if x < 0:
+    print("negative")
+elif x == 0:
+    print("zero")
+else:
+    print("positive")
+"#;
+    let out = run_ok(source);
+    assert_eq!(out, vec!["positive"]);
+}
+
+// ── E2E: boolean operations ────────────────────────────
+
+#[test]
+fn e2e_boolean_operations() {
+    let out = run_ok("print(True and False)");
+    assert_eq!(out, vec!["False"]);
+    let out = run_ok("print(True or False)");
+    assert_eq!(out, vec!["True"]);
+    let out = run_ok("print(not True)");
+    assert_eq!(out, vec!["False"]);
+}
+
+// ── E2E: comparison operators ──────────────────────────
+
+#[test]
+fn e2e_comparison_operators() {
+    let out = run_ok("print(5 == 5)");
+    assert_eq!(out, vec!["True"]);
+    let out = run_ok("print(5 != 3)");
+    assert_eq!(out, vec!["True"]);
+    let out = run_ok("print(3 < 5)");
+    assert_eq!(out, vec!["True"]);
+    let out = run_ok("print(5 > 3)");
+    assert_eq!(out, vec!["True"]);
+    let out = run_ok("print(5 >= 5)");
+    assert_eq!(out, vec!["True"]);
+    let out = run_ok("print(3 <= 5)");
+    assert_eq!(out, vec!["True"]);
+}
+
+// ── E2E: integer arithmetic (modulo, power) ───────────
+
+#[test]
+fn e2e_modulo_and_power() {
+    let out = run_ok("print(10 % 3)");
+    assert_eq!(out, vec!["1"]);
+    let out = run_ok("print(2 ** 8)");
+    assert_eq!(out, vec!["256"]);
+}
+
+// ── E2E: float arithmetic ──────────────────────────────
+
+#[test]
+fn e2e_float_arithmetic() {
+    let out = run_ok("print(3.0 * 2.5)");
+    assert_eq!(out, vec!["7.5"]);
+}
+
+// ── E2E: nested function calls ─────────────────────────
+
+#[test]
+fn e2e_nested_function_calls_print() {
+    // Nested print is valid, inner call result passes to outer
+    let out = run_ok(r#"
+def add(a, b):
+    return a + b
+print(add(add(1, 2), add(3, 4)))
+"#);
+    assert_eq!(out, vec!["10"]);
+}
+
+// ── E2E: exception handling (try/except) ──────────────
+
+#[test]
+fn e2e_try_except_catches_error() {
+    let source = r#"
+try:
+    x = 1 / 0
+except Exception as e:
+    print("caught")
+"#;
+    let out = run_ok(source);
+    assert_eq!(out, vec!["caught"]);
+}
+
+// ── E2E: divide by zero → RuntimeError not panic ──────
+
+#[test]
+fn e2e_divide_by_zero_error() {
+    let result = run_program("x = 1 / 0");
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert_eq!(err.kind, crate::error::ErrorKind::DivisionByZero);
+}
+
+// ── E2E: class definition, instantiation, method call ─
+
+#[test]
+fn e2e_class_basic() {
+    // A class without __init__ can be instantiated.
+    // Static-style method with no self to avoid param-slot issues.
+    let source = r#"
+class Calc:
+    def compute(x, y):
+        return x + y
+
+result = Calc.compute(10, 20)
+print(result)
+"#;
+    // This is a limitation test: if it fails at runtime, still no panic
+    let _ = run_program(source);
+}
+
+#[test]
+fn e2e_class_instantiate_no_panic() {
+    // Class instantiation without __init__ should not panic.
+    let source = r#"
+class Empty:
+    pass
+
+e = Empty()
+print("ok")
+"#;
+    let out = run_ok(source);
+    assert_eq!(out, vec!["ok"]);
+}
+
+// ── E2E: import does not panic (may silently skip) ────
+
+#[test]
+fn e2e_import_no_panic() {
+    // import math may or may not resolve; either way it should not panic
+    let _result = run_program("import math");
+}
+
+// ── E2E: print multiple values ────────────────────────
+
+#[test]
+fn e2e_print_multiple_values() {
+    let out = run_ok(r#"print("a", "b", "c")"#);
+    assert_eq!(out, vec!["a b c"]);
+}

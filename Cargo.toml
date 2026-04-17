@@ -18,6 +18,7 @@ members = [
     "crates/unilang-drivers",
     "crates/unilang-installer",
     "crates/unilang-bridge",
+    "crates/unilang-e2e-tests",
 ]
 
 [workspace.package]

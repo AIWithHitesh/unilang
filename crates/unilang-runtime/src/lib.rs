@@ -5,6 +5,7 @@
 //! the bytecodes produced by `unilang-codegen`.
 
 pub mod error;
+pub mod limits;
 pub mod value;
 pub mod vm;
 

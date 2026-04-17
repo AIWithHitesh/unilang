@@ -8,6 +8,7 @@ use std::collections::HashMap;
 use unilang_codegen::bytecode::{Bytecode, ClassDef, Function, Opcode};
 
 use crate::error::{ErrorKind, RuntimeError};
+use crate::limits::ExecutionLimits;
 use crate::value::{InstanceData, RuntimeValue};
 
 /// A single activation record on the call stack.
@@ -61,6 +62,10 @@ pub struct VM {
     builtins: HashMap<String, BuiltinFn>,
     /// Active exception handlers (innermost first at the end).
     except_handlers: Vec<ExceptHandler>,
+    /// Configurable execution limits for this VM instance.
+    limits: ExecutionLimits,
+    /// Running count of bytecode instructions executed so far.
+    instruction_count: u64,
 }
 
 impl VM {
@@ -81,7 +86,15 @@ impl VM {
             output: None,
             builtins: HashMap::new(),
             except_handlers: Vec::new(),
+            limits: ExecutionLimits::default(),
+            instruction_count: 0,
         }
+    }
+
+    /// Set execution limits for this VM instance.
+    pub fn with_limits(mut self, limits: ExecutionLimits) -> Self {
+        self.limits = limits;
+        self
     }
 
     /// Create a VM that captures print output (used by tests and `execute_with_output`).
@@ -197,6 +210,20 @@ impl VM {
         // Fetch instruction.
         let instr = self.frames.last().unwrap().code[self.frames.last().unwrap().ip].clone();
         self.current_frame_mut().ip += 1;
+
+        // Instruction limit check (sampled every 1000 instructions for performance).
+        self.instruction_count += 1;
+        if self.instruction_count % 1000 == 0
+            && self.instruction_count > self.limits.max_instructions
+        {
+            return Err(RuntimeError::new(
+                ErrorKind::Exception,
+                format!(
+                    "execution limit exceeded: program ran more than {} instructions",
+                    self.limits.max_instructions
+                ),
+            ));
+        }
 
         match self.execute(instr) {
             Ok(cont) => Ok(cont),
@@ -586,7 +613,17 @@ impl VM {
                         // Remove arguments from the stack.
                         self.stack.truncate(stack_base);
 
-                        if self.frames.len() >= MAX_CALL_DEPTH {
+                        let call_depth = self.frames.len();
+                        if call_depth >= self.limits.max_call_depth {
+                            return Err(RuntimeError::new(
+                                ErrorKind::Exception,
+                                format!(
+                                    "call stack limit exceeded: max depth is {}",
+                                    self.limits.max_call_depth
+                                ),
+                            ));
+                        }
+                        if call_depth >= MAX_CALL_DEPTH {
                             return Err(RuntimeError::new(
                                 ErrorKind::Exception,
                                 format!("maximum call depth exceeded ({})", MAX_CALL_DEPTH),
@@ -1551,6 +1588,15 @@ impl VM {
         }
 
         let target_depth = self.frames.len();
+        if self.frames.len() >= self.limits.max_call_depth {
+            return Err(RuntimeError::new(
+                ErrorKind::Exception,
+                format!(
+                    "call stack limit exceeded: max depth is {}",
+                    self.limits.max_call_depth
+                ),
+            ));
+        }
         if self.frames.len() >= MAX_CALL_DEPTH {
             return Err(RuntimeError::new(
                 ErrorKind::Exception,

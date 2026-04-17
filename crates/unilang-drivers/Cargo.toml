@@ -46,8 +46,9 @@ hex       = { version = "0.4",                                     optional = tr
 
 # ── Messaging ─────────────────────────────────────────────────────
 # lapin is an async AMQP client for RabbitMQ. Uses tokio internally.
-lapin     = { version = "2",                                       optional = true }
-tokio     = { version = "1", features = ["rt", "rt-multi-thread"], optional = true }
+lapin          = { version = "2",                                       optional = true }
+tokio          = { version = "1", features = ["rt", "rt-multi-thread"], optional = true }
+futures-lite   = { version = "2",                                       optional = true }
 # nats 0.24 provides a blocking synchronous client API for NATS messaging
 nats      = { version = "0.26",                                    optional = true }
 
@@ -84,7 +85,7 @@ kafka              = []
 smtp               = ["dep:rustls", "dep:rustls-pki-types", "dep:webpki-roots", "dep:base64"]
 influxdb           = ["dep:ureq"]
 s3                 = ["dep:ureq", "dep:sha2", "dep:hmac", "dep:hex"]
-rabbitmq           = ["dep:lapin", "dep:tokio"]
+rabbitmq           = ["dep:lapin", "dep:tokio", "dep:futures-lite"]
 nats-driver        = ["dep:nats"]
 prometheus-driver  = ["dep:prometheus"]
 websocket          = ["dep:tungstenite"]

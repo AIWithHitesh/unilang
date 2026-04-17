@@ -1,0 +1,22 @@
+class Animal:
+    def __init__(self, name, sound):
+        self.name = name
+        self.sound = sound
+
+    def speak(self):
+        print(self.name + " says " + self.sound)
+
+class Dog:
+    def __init__(self, name):
+        self.name = name
+        self.sound = "woof"
+
+    def speak(self):
+        print(self.name + " says " + self.sound)
+
+    def fetch(self, item):
+        print(self.name + " fetches the " + item)
+
+d = Dog("Rex")
+d.speak()
+d.fetch("ball")

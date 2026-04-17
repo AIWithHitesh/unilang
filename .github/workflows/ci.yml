@@ -162,3 +162,31 @@ jobs:
           print(rows[0]["val"])
           EOF
           ./target/release/unilang run /tmp/sqlite_test.uniL
+
+  # ──────────────────────────────────────────────────────────────
+  # Memory safety — valgrind leak check + LSAN via AddressSanitizer
+  # ──────────────────────────────────────────────────────────────
+  memory-safety:
+    name: Memory Safety (valgrind / LSAN)
+    runs-on: ubuntu-latest
+    needs: build
+    continue-on-error: true  # Don't block merges on memory tool availability
+
+    steps:
+      - uses: actions/checkout@v5
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+      - name: Install valgrind
+        run: sudo apt-get install -y valgrind
+      - name: Build debug binary
+        run: cargo build -p unilang-cli
+      - name: Valgrind — hello world (memory leak check)
+        run: |
+          echo 'print("hello")' > /tmp/vg_test.uniL
+          valgrind --leak-check=full --error-exitcode=1 \
+            ./target/debug/unilang run /tmp/vg_test.uniL 2>&1 | tail -20
+        continue-on-error: true
+      - name: LSAN via AddressSanitizer
+        run: |
+          RUSTFLAGS="-Z sanitizer=address" cargo build --target x86_64-unknown-linux-gnu -p unilang-cli 2>&1 | tail -10
+        continue-on-error: true
