@@ -1,0 +1,433 @@
+// pipeline.uniL — Data Processing / ETL Pipeline
+// Demonstrates: CSV parsing, transformation, SQLite load, aggregate queries
+// Run from repo root with:
+//   unilang run examples/data-pipeline/pipeline.uniL
+
+// ═══════════════════════════════════════════════════════════════════
+//  EXTRACT — inline CSV data (sales records)
+//  Columns: date, product, category, region, quantity, unit_price
+// ═══════════════════════════════════════════════════════════════════
+
+RAW_CSV = "date,product,category,region,quantity,unit_price
+2024-01-05,Laptop Pro 15,Electronics,North,3,1299.99
+2024-01-07,Wireless Mouse,Electronics,South,12,29.99
+2024-01-08,Office Chair,Furniture,East,5,349.50
+2024-01-10,Laptop Pro 15,Electronics,West,2,1299.99
+2024-01-12,Standing Desk,Furniture,North,3,599.00
+2024-01-15,Wireless Mouse,Electronics,East,8,29.99
+2024-01-18,USB-C Hub,Electronics,South,20,49.99
+2024-01-20,Office Chair,Furniture,West,2,349.50
+2024-01-22,Laptop Pro 15,Electronics,North,1,1299.99
+2024-01-25,Webcam HD,Electronics,East,15,89.99
+2024-01-28,Standing Desk,Furniture,South,1,599.00
+2024-01-30,USB-C Hub,Electronics,West,0,49.99
+2024-02-02,Laptop Pro 15,Electronics,South,4,1299.99
+2024-02-05,Wireless Mouse,Electronics,North,25,29.99
+2024-02-07,Ergonomic Keyboard,Electronics,East,10,129.99
+2024-02-10,Office Chair,Furniture,South,6,349.50
+2024-02-12,Webcam HD,Electronics,West,9,89.99
+2024-02-14,USB-C Hub,Electronics,North,30,49.99
+2024-02-18,Standing Desk,Furniture,East,4,599.00
+2024-02-20,Laptop Pro 15,Electronics,West,2,1299.99
+2024-02-22,Ergonomic Keyboard,Electronics,South,7,129.99
+2024-02-25,Wireless Mouse,Electronics,West,18,29.99
+2024-02-28,Webcam HD,Electronics,North,11,89.99
+2024-03-02,Office Chair,Furniture,East,3,349.50
+2024-03-05,Laptop Pro 15,Electronics,North,5,1299.99
+2024-03-07,USB-C Hub,Electronics,South,22,49.99
+2024-03-10,Standing Desk,Furniture,West,2,599.00
+2024-03-12,Ergonomic Keyboard,Electronics,North,14,129.99
+2024-03-15,Wireless Mouse,Electronics,East,30,29.99
+2024-03-18,Webcam HD,Electronics,South,6,89.99
+2024-03-20,Laptop Pro 15,Electronics,East,3,1299.99
+2024-03-22,Office Chair,Furniture,North,4,349.50
+2024-03-25,USB-C Hub,Electronics,West,-5,49.99
+2024-03-28,Ergonomic Keyboard,Electronics,East,9,129.99
+2024-03-30,Wireless Mouse,Electronics,North,20,29.99"
+
+// ─── parse_csv: raw string → list of dicts ──────────────────────────────────
+// Header row drives the keys; every subsequent row becomes a dict entry.
+
+def parse_csv(text) {
+    records = []
+    lines = text.split("\n")
+    if len(lines) < 2 {
+        return records
+    }
+    header_line = lines[0]
+    headers = header_line.split(",")
+    i = 1
+    while i < len(lines) {
+        line = lines[i]
+        i = i + 1
+        if line == "" {
+            continue
+        }
+        fields = line.split(",")
+        if len(fields) != len(headers) {
+            continue
+        }
+        row = {}
+        j = 0
+        while j < len(headers) {
+            row[headers[j]] = fields[j]
+            j = j + 1
+        }
+        records.append(row)
+    }
+    return records
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  TRANSFORM
+//  1. Filter invalid rows (quantity <= 0 or missing fields)
+//  2. Cast numeric fields
+//  3. Compute revenue = quantity * unit_price
+//  4. Normalise product name (trim whitespace, title-case preserved)
+//  5. Extract month from date (YYYY-MM)
+// ═══════════════════════════════════════════════════════════════════
+
+def is_valid_row(row) {
+    // Required fields must be non-empty
+    if row["date"] == ""        { return false }
+    if row["product"] == ""     { return false }
+    if row["category"] == ""    { return false }
+    if row["region"] == ""      { return false }
+    if row["quantity"] == ""    { return false }
+    if row["unit_price"] == ""  { return false }
+    // Quantity must be a positive integer
+    qty = int(row["quantity"])
+    if qty <= 0                 { return false }
+    return true
+}
+
+def transform_rows(raw_rows) {
+    clean = []
+    skipped = 0
+    for row in raw_rows {
+        if not is_valid_row(row) {
+            skipped = skipped + 1
+            continue
+        }
+        qty   = int(row["quantity"])
+        price = float(row["unit_price"])
+        rev   = qty * price
+        // Extract YYYY-MM month prefix from date string
+        date_parts = row["date"].split("-")
+        month = date_parts[0] + "-" + date_parts[1]
+        clean.append({
+            "date":       row["date"],
+            "month":      month,
+            "product":    row["product"],
+            "category":   row["category"],
+            "region":     row["region"],
+            "quantity":   qty,
+            "unit_price": price,
+            "revenue":    rev
+        })
+    }
+    return {"rows": clean, "skipped": skipped}
+}
+
+// ─── group_by_product: list of clean rows → per-product aggregates ──────────
+
+def group_by_product(rows) {
+    prod_names  = []
+    prod_qty    = []
+    prod_rev    = []
+    prod_orders = []
+
+    for row in rows {
+        pname = row["product"]
+        found = -1
+        k = 0
+        while k < len(prod_names) {
+            if prod_names[k] == pname {
+                found = k
+            }
+            k = k + 1
+        }
+        if found == -1 {
+            prod_names.append(pname)
+            prod_qty.append(row["quantity"])
+            prod_rev.append(row["revenue"])
+            prod_orders.append(1)
+        } else {
+            prod_qty[found]    = prod_qty[found]    + row["quantity"]
+            prod_rev[found]    = prod_rev[found]    + row["revenue"]
+            prod_orders[found] = prod_orders[found] + 1
+        }
+    }
+
+    result = []
+    i = 0
+    while i < len(prod_names) {
+        avg_order_rev = prod_rev[i] / prod_orders[i]
+        result.append({
+            "product":       prod_names[i],
+            "total_quantity": prod_qty[i],
+            "total_revenue":  prod_rev[i],
+            "order_count":    prod_orders[i],
+            "avg_order_rev":  avg_order_rev
+        })
+        i = i + 1
+    }
+    return result
+}
+
+// ─── group_by_month: list of clean rows → monthly totals ────────────────────
+
+def group_by_month(rows) {
+    months   = []
+    m_rev    = []
+    m_qty    = []
+
+    for row in rows {
+        m = row["month"]
+        found = -1
+        k = 0
+        while k < len(months) {
+            if months[k] == m {
+                found = k
+            }
+            k = k + 1
+        }
+        if found == -1 {
+            months.append(m)
+            m_rev.append(row["revenue"])
+            m_qty.append(row["quantity"])
+        } else {
+            m_rev[found] = m_rev[found] + row["revenue"]
+            m_qty[found] = m_qty[found] + row["quantity"]
+        }
+    }
+
+    result = []
+    i = 0
+    while i < len(months) {
+        result.append({
+            "month":    months[i],
+            "revenue":  m_rev[i],
+            "quantity": m_qty[i]
+        })
+        i = i + 1
+    }
+    return result
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  LOAD — write clean rows and aggregates into SQLite
+// ═══════════════════════════════════════════════════════════════════
+
+def init_db() {
+    db_connect("sqlite://sales_pipeline.db")
+
+    db_exec("CREATE TABLE IF NOT EXISTS sales (
+        id         INTEGER PRIMARY KEY AUTOINCREMENT,
+        date       TEXT    NOT NULL,
+        month      TEXT    NOT NULL,
+        product    TEXT    NOT NULL,
+        category   TEXT    NOT NULL,
+        region     TEXT    NOT NULL,
+        quantity   INTEGER NOT NULL,
+        unit_price REAL    NOT NULL,
+        revenue    REAL    NOT NULL
+    )", [])
+
+    db_exec("CREATE TABLE IF NOT EXISTS product_summary (
+        product         TEXT PRIMARY KEY,
+        total_quantity  INTEGER NOT NULL,
+        total_revenue   REAL    NOT NULL,
+        order_count     INTEGER NOT NULL,
+        avg_order_rev   REAL    NOT NULL
+    )", [])
+
+    db_exec("CREATE TABLE IF NOT EXISTS monthly_summary (
+        month     TEXT PRIMARY KEY,
+        revenue   REAL    NOT NULL,
+        quantity  INTEGER NOT NULL
+    )", [])
+
+    // Wipe previous run so this script is idempotent
+    db_exec("DELETE FROM sales",           [])
+    db_exec("DELETE FROM product_summary", [])
+    db_exec("DELETE FROM monthly_summary", [])
+}
+
+def load_sales(rows) {
+    for row in rows {
+        db_exec("INSERT INTO sales (date, month, product, category, region, quantity, unit_price, revenue) VALUES (?,?,?,?,?,?,?,?)",
+            [row["date"], row["month"], row["product"], row["category"],
+             row["region"], row["quantity"], row["unit_price"], row["revenue"]])
+    }
+}
+
+def load_product_summary(summaries) {
+    for s in summaries {
+        db_exec("INSERT INTO product_summary (product, total_quantity, total_revenue, order_count, avg_order_rev) VALUES (?,?,?,?,?)",
+            [s["product"], s["total_quantity"], s["total_revenue"],
+             s["order_count"], s["avg_order_rev"]])
+    }
+}
+
+def load_monthly_summary(monthly) {
+    for m in monthly {
+        db_exec("INSERT INTO monthly_summary (month, revenue, quantity) VALUES (?,?,?)",
+            [m["month"], m["revenue"], m["quantity"]])
+    }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  QUERY — pull aggregates back out for the report
+// ═══════════════════════════════════════════════════════════════════
+
+def query_totals() {
+    rows = db_query("SELECT COUNT(*) as txn_count, SUM(quantity) as total_units, SUM(revenue) as grand_total FROM sales", [])
+    return rows[0]
+}
+
+def query_top_products(n) {
+    rows = db_query("SELECT product, total_revenue, total_quantity, order_count FROM product_summary ORDER BY total_revenue DESC", [])
+    result = []
+    i = 0
+    while i < len(rows) {
+        if i >= n { break }
+        result.append(rows[i])
+        i = i + 1
+    }
+    return result
+}
+
+def query_monthly() {
+    return db_query("SELECT month, revenue, quantity FROM monthly_summary ORDER BY month", [])
+}
+
+def query_by_category() {
+    return db_query("SELECT category, SUM(quantity) as units, SUM(revenue) as revenue FROM sales GROUP BY category ORDER BY revenue DESC", [])
+}
+
+def query_by_region() {
+    return db_query("SELECT region, SUM(revenue) as revenue, COUNT(*) as orders FROM sales GROUP BY region ORDER BY revenue DESC", [])
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  REPORT — formatted console output
+// ═══════════════════════════════════════════════════════════════════
+
+def pad_right(s, width) {
+    result = s
+    while len(result) < width {
+        result = result + " "
+    }
+    return result
+}
+
+def fmt_currency(val) {
+    // Round to 2 decimal places via integer arithmetic
+    cents = int(val * 100.0 + 0.5)
+    dollars = cents / 100
+    remainder = cents - dollars * 100
+    r_str = str(remainder)
+    if remainder < 10 {
+        r_str = "0" + r_str
+    }
+    return "$" + str(dollars) + "." + r_str
+}
+
+def print_report(skipped, totals, top_products, monthly, by_category, by_region) {
+    print("")
+    print("╔══════════════════════════════════════════════════════════╗")
+    print("║          SALES ETL PIPELINE — SUMMARY REPORT            ║")
+    print("╚══════════════════════════════════════════════════════════╝")
+    print("")
+
+    // ── Overview ──────────────────────────────────────────────────
+    print("── OVERVIEW ──────────────────────────────────────────────")
+    print("  Rows parsed from CSV    : " + str(totals["txn_count"] + skipped))
+    print("  Rows skipped (invalid)  : " + str(skipped))
+    print("  Rows loaded to SQLite   : " + str(totals["txn_count"]))
+    print("  Total units sold        : " + str(totals["total_units"]))
+    print("  Grand total revenue     : " + fmt_currency(totals["grand_total"]))
+    print("")
+
+    // ── Top 3 Products by Revenue ─────────────────────────────────
+    print("── TOP 3 PRODUCTS BY REVENUE ─────────────────────────────")
+    print("  " + pad_right("Product", 22) + pad_right("Revenue", 14) + pad_right("Units", 8) + "Orders")
+    print("  " + pad_right("-------", 22) + pad_right("-------", 14) + pad_right("-----", 8) + "------")
+    rank = 1
+    for p in top_products {
+        line = "  " + str(rank) + ". " + pad_right(p["product"], 20) + pad_right(fmt_currency(p["total_revenue"]), 14) + pad_right(str(p["total_quantity"]), 8) + str(p["order_count"])
+        print(line)
+        rank = rank + 1
+    }
+    print("")
+
+    // ── Monthly Revenue Trend ─────────────────────────────────────
+    print("── MONTHLY REVENUE TREND ──────────────────────────────────")
+    print("  " + pad_right("Month", 10) + pad_right("Revenue", 14) + "Units Sold")
+    print("  " + pad_right("-----", 10) + pad_right("-------", 14) + "----------")
+    for m in monthly {
+        print("  " + pad_right(m["month"], 10) + pad_right(fmt_currency(m["revenue"]), 14) + str(m["quantity"]))
+    }
+    print("")
+
+    // ── Revenue by Category ───────────────────────────────────────
+    print("── REVENUE BY CATEGORY ────────────────────────────────────")
+    for c in by_category {
+        print("  " + pad_right(c["category"], 14) + fmt_currency(c["revenue"]) + "  (" + str(c["units"]) + " units)")
+    }
+    print("")
+
+    // ── Revenue by Region ─────────────────────────────────────────
+    print("── REVENUE BY REGION ──────────────────────────────────────")
+    for r in by_region {
+        print("  " + pad_right(r["region"], 8) + fmt_currency(r["revenue"]) + "  (" + str(r["orders"]) + " orders)")
+    }
+    print("")
+
+    print("Pipeline complete. Database: sales_pipeline.db")
+    print("")
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  MAIN — orchestrate Extract → Transform → Load → Report
+// ═══════════════════════════════════════════════════════════════════
+
+print("Starting ETL pipeline...")
+print("")
+
+// Stage 1: Extract
+print("[1/4] Extract — parsing inline CSV...")
+raw_rows = parse_csv(RAW_CSV)
+print("      " + str(len(raw_rows)) + " raw rows read.")
+
+// Stage 2: Transform
+print("[2/4] Transform — filtering, casting, computing revenue...")
+transform_result = transform_rows(raw_rows)
+clean_rows = transform_result["rows"]
+skipped    = transform_result["skipped"]
+print("      " + str(len(clean_rows)) + " valid rows, " + str(skipped) + " skipped.")
+
+product_summaries = group_by_product(clean_rows)
+monthly_summaries = group_by_month(clean_rows)
+print("      Aggregated " + str(len(product_summaries)) + " products across " + str(len(monthly_summaries)) + " months.")
+
+// Stage 3: Load
+print("[3/4] Load — writing to SQLite (sales_pipeline.db)...")
+init_db()
+load_sales(clean_rows)
+load_product_summary(product_summaries)
+load_monthly_summary(monthly_summaries)
+print("      " + str(len(clean_rows)) + " sale rows inserted.")
+print("      " + str(len(product_summaries)) + " product summary rows inserted.")
+print("      " + str(len(monthly_summaries)) + " monthly summary rows inserted.")
+
+// Stage 4: Query & Report
+print("[4/4] Report — querying aggregates and printing summary...")
+totals       = query_totals()
+top_products = query_top_products(3)
+monthly      = query_monthly()
+by_category  = query_by_category()
+by_region    = query_by_region()
+
+print_report(skipped, totals, top_products, monthly, by_category, by_region)

@@ -1,0 +1,428 @@
+// ============================================================
+//  Task Manager — REST API Backend
+//  UniLang demonstration: Python-style logic + Java-style OOP
+//  SQLite (embedded) for persistence
+//  Run from repo root:
+//    unilang run examples/web-service/server.uniL
+// ============================================================
+
+// ─── Database Initialization ──────────────────────────────────
+
+def init_db() {
+    db_connect("sqlite://tasks.db");
+
+    // tasks: core entity
+    db_exec("CREATE TABLE IF NOT EXISTS tasks (id INTEGER PRIMARY KEY AUTOINCREMENT, title TEXT NOT NULL, description TEXT DEFAULT '', status TEXT DEFAULT 'pending', priority TEXT DEFAULT 'medium', due_date TEXT DEFAULT '', created_at TEXT DEFAULT CURRENT_TIMESTAMP, updated_at TEXT DEFAULT CURRENT_TIMESTAMP)", []);
+
+    // tags: many-to-many relationship with tasks
+    db_exec("CREATE TABLE IF NOT EXISTS tags (id INTEGER PRIMARY KEY AUTOINCREMENT, task_id INTEGER NOT NULL, name TEXT NOT NULL)", []);
+
+    print("Database initialized: tasks.db");
+}
+
+// ─── Response Helpers ─────────────────────────────────────────
+
+// Return a 200 JSON response
+def json_ok(data) {
+    return {
+        "status": 200,
+        "body": to_json(data),
+        "content_type": "application/json"
+    };
+}
+
+// Return a JSON response with an explicit status code
+def json_status(code, data) {
+    return {
+        "status": code,
+        "body": to_json(data),
+        "content_type": "application/json"
+    };
+}
+
+// Return a JSON error response
+def json_err(code, msg) {
+    return {
+        "status": code,
+        "body": to_json({"error": msg}),
+        "content_type": "application/json"
+    };
+}
+
+// ─── Query String Parser ──────────────────────────────────────
+
+// Parse "key=value&key2=value2" into a dict
+def parse_query(qs) {
+    result = {};
+    if qs == "" { return result; }
+    if qs == null { return result; }
+    pairs = split(qs, "&");
+    i = 0;
+    while i < len(pairs) {
+        kv = split(pairs[i], "=");
+        i = i + 1;
+        if len(kv) >= 2 {
+            result[kv[0]] = kv[1];
+        }
+    }
+    return result;
+}
+
+// ─── Task Row → Dict ──────────────────────────────────────────
+
+// Convert a raw DB row into a clean task dict, attaching its tags
+def row_to_task(r) {
+    task_id = r["id"];
+    tag_rows = db_query("SELECT name FROM tags WHERE task_id = ?", [task_id]);
+    tag_names = [];
+    t = 0;
+    while t < len(tag_rows) {
+        tag_names.append(tag_rows[t]["name"]);
+        t = t + 1;
+    }
+    return {
+        "id":          task_id,
+        "title":       r["title"],
+        "description": r["description"],
+        "status":      r["status"],
+        "priority":    r["priority"],
+        "due_date":    r["due_date"],
+        "tags":        tag_names,
+        "created_at":  r["created_at"],
+        "updated_at":  r["updated_at"]
+    };
+}
+
+// ─── Validation Helpers ───────────────────────────────────────
+
+// Validate that a status value is one of the allowed values
+def is_valid_status(s) {
+    if s == "pending"     { return true; }
+    if s == "in_progress" { return true; }
+    if s == "done"        { return true; }
+    if s == "cancelled"   { return true; }
+    return false;
+}
+
+// Validate that a priority value is one of the allowed values
+def is_valid_priority(p) {
+    if p == "low"    { return true; }
+    if p == "medium" { return true; }
+    if p == "high"   { return true; }
+    return false;
+}
+
+// ─── Route Handlers ───────────────────────────────────────────
+
+// GET / — welcome message with links to all endpoints
+def handle_root(req) {
+    return json_ok({
+        "service":  "Task Manager API",
+        "version":  "1.0.0",
+        "language": "UniLang",
+        "endpoints": [
+            "GET    /",
+            "GET    /health",
+            "GET    /tasks",
+            "POST   /tasks",
+            "GET    /tasks/:id",
+            "PUT    /tasks/:id",
+            "DELETE /tasks/:id"
+        ]
+    });
+}
+
+// GET /health — liveness probe; reports total task counts by status
+def handle_health(req) {
+    try {
+        rows = db_query("SELECT status, COUNT(*) as cnt FROM tasks GROUP BY status", []);
+        counts = {};
+        i = 0;
+        while i < len(rows) {
+            counts[rows[i]["status"]] = rows[i]["cnt"];
+            i = i + 1;
+        }
+        total_row = db_query("SELECT COUNT(*) as total FROM tasks", []);
+        total = 0;
+        if len(total_row) > 0 { total = total_row[0]["total"]; }
+        return json_ok({
+            "status":  "healthy",
+            "service": "Task Manager API",
+            "db":      "sqlite://tasks.db",
+            "tasks":   {
+                "total":       total,
+                "by_status":   counts
+            }
+        });
+    } except {
+        return json_err(503, "Service unavailable — database error");
+    }
+}
+
+// GET /tasks — list all tasks; supports ?status=, ?priority=, ?search= filters
+def handle_list_tasks(req) {
+    try {
+        params = parse_query(req["query"]);
+        status_filter   = params["status"];
+        priority_filter = params["priority"];
+        search_filter   = params["search"];
+
+        // Build all rows first, then filter in-memory (simple and portable)
+        rows = db_query("SELECT * FROM tasks ORDER BY CASE priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END, created_at DESC", []);
+
+        tasks = [];
+        i = 0;
+        while i < len(rows) {
+            r = rows[i];
+            i = i + 1;
+
+            // Status filter
+            if status_filter != null {
+                if status_filter != "" {
+                    if r["status"] != status_filter { continue; }
+                }
+            }
+
+            // Priority filter
+            if priority_filter != null {
+                if priority_filter != "" {
+                    if r["priority"] != priority_filter { continue; }
+                }
+            }
+
+            // Search filter — matches title or description (case-insensitive)
+            if search_filter != null {
+                if search_filter != "" {
+                    title_low = lower(r["title"]);
+                    desc_low  = lower(r["description"]);
+                    term_low  = lower(search_filter);
+                    found = false;
+                    if contains(title_low, term_low) { found = true; }
+                    if contains(desc_low, term_low)  { found = true; }
+                    if found == false { continue; }
+                }
+            }
+
+            tasks.append(row_to_task(r));
+        }
+
+        return json_ok({"tasks": tasks, "count": len(tasks)});
+    } except {
+        return json_err(500, "Failed to list tasks");
+    }
+}
+
+// POST /tasks — create a new task
+// Body: { "title": str, "description"?: str, "priority"?: str, "due_date"?: str, "tags"?: [str] }
+def handle_create_task(req) {
+    try {
+        body = from_json(req["body"]);
+
+        // Required field validation
+        title = body["title"];
+        if title == null { return json_err(400, "Field 'title' is required"); }
+        if title == ""   { return json_err(400, "Field 'title' cannot be empty"); }
+
+        // Optional fields with defaults
+        description = body["description"];
+        if description == null { description = ""; }
+
+        priority = body["priority"];
+        if priority == null { priority = "medium"; }
+        if is_valid_priority(priority) == false {
+            return json_err(400, "priority must be one of: low, medium, high");
+        }
+
+        due_date = body["due_date"];
+        if due_date == null { due_date = ""; }
+
+        tags = body["tags"];
+        if tags == null { tags = []; }
+
+        // Insert task row
+        db_exec("INSERT INTO tasks (title, description, priority, due_date) VALUES (?, ?, ?, ?)",
+                [title, description, priority, due_date]);
+
+        // Fetch the newly inserted row
+        new_rows = db_query("SELECT * FROM tasks ORDER BY id DESC LIMIT 1", []);
+        if len(new_rows) == 0 {
+            return json_err(500, "Failed to retrieve created task");
+        }
+        new_task = new_rows[0];
+        task_id  = new_task["id"];
+
+        // Insert tags
+        j = 0;
+        while j < len(tags) {
+            tag = tags[j];
+            j = j + 1;
+            if tag != "" {
+                db_exec("INSERT INTO tags (task_id, name) VALUES (?, ?)", [task_id, tag]);
+            }
+        }
+
+        return json_status(201, row_to_task(new_task));
+    } except {
+        return json_err(500, "Failed to create task");
+    }
+}
+
+// GET /tasks/:id — retrieve a single task by ID
+def handle_get_task(req, task_id) {
+    try {
+        rows = db_query("SELECT * FROM tasks WHERE id = ?", [task_id]);
+        if len(rows) == 0 {
+            return json_err(404, "Task not found");
+        }
+        return json_ok(row_to_task(rows[0]));
+    } except {
+        return json_err(500, "Failed to fetch task");
+    }
+}
+
+// PUT /tasks/:id — update an existing task (partial update supported)
+// Body: { "title"?: str, "description"?: str, "status"?: str, "priority"?: str, "due_date"?: str, "tags"?: [str] }
+def handle_update_task(req, task_id) {
+    try {
+        // Ensure the task exists before updating
+        existing = db_query("SELECT * FROM tasks WHERE id = ?", [task_id]);
+        if len(existing) == 0 {
+            return json_err(404, "Task not found");
+        }
+        old = existing[0];
+
+        body = from_json(req["body"]);
+
+        // Merge incoming fields over existing values
+        title = body["title"];
+        if title == null { title = old["title"]; }
+        if title == ""   { return json_err(400, "Field 'title' cannot be empty"); }
+
+        description = body["description"];
+        if description == null { description = old["description"]; }
+
+        status = body["status"];
+        if status == null { status = old["status"]; }
+        if is_valid_status(status) == false {
+            return json_err(400, "status must be one of: pending, in_progress, done, cancelled");
+        }
+
+        priority = body["priority"];
+        if priority == null { priority = old["priority"]; }
+        if is_valid_priority(priority) == false {
+            return json_err(400, "priority must be one of: low, medium, high");
+        }
+
+        due_date = body["due_date"];
+        if due_date == null { due_date = old["due_date"]; }
+
+        // Persist updated fields
+        db_exec("UPDATE tasks SET title = ?, description = ?, status = ?, priority = ?, due_date = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                [title, description, status, priority, due_date, task_id]);
+
+        // Replace tags if a new list was provided
+        tags = body["tags"];
+        if tags != null {
+            db_exec("DELETE FROM tags WHERE task_id = ?", [task_id]);
+            k = 0;
+            while k < len(tags) {
+                tag = tags[k];
+                k = k + 1;
+                if tag != "" {
+                    db_exec("INSERT INTO tags (task_id, name) VALUES (?, ?)", [task_id, tag]);
+                }
+            }
+        }
+
+        // Return the updated task
+        updated = db_query("SELECT * FROM tasks WHERE id = ?", [task_id]);
+        return json_ok(row_to_task(updated[0]));
+    } except {
+        return json_err(500, "Failed to update task");
+    }
+}
+
+// DELETE /tasks/:id — permanently remove a task and its tags
+def handle_delete_task(req, task_id) {
+    try {
+        existing = db_query("SELECT id FROM tasks WHERE id = ?", [task_id]);
+        if len(existing) == 0 {
+            return json_err(404, "Task not found");
+        }
+        db_exec("DELETE FROM tags  WHERE task_id = ?", [task_id]);
+        db_exec("DELETE FROM tasks WHERE id = ?",      [task_id]);
+        return json_ok({"message": "Task deleted", "id": task_id});
+    } except {
+        return json_err(500, "Failed to delete task");
+    }
+}
+
+// ─── Router ──────────────────────────────────────────────────
+
+def router(req) {
+    method = req["method"];
+    path   = req["path"];
+
+    // CORS preflight
+    if method == "OPTIONS" {
+        return {
+            "status": 204,
+            "body": "",
+            "content_type": "text/plain",
+            "headers": {
+                "Access-Control-Allow-Origin":  "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type"
+            }
+        };
+    }
+
+    // Split path into segments: "/tasks/42" → ["", "tasks", "42"]
+    parts  = split(path, "/");
+    nparts = len(parts);
+
+    seg1 = "";
+    seg2 = "";
+    if nparts >= 2 { seg1 = parts[1]; }
+    if nparts >= 3 { seg2 = parts[2]; }
+
+    // ── GET / ────────────────────────────────────────────────
+    if method == "GET" {
+        if path == "/" { return handle_root(req); }
+    }
+
+    // ── GET /health ──────────────────────────────────────────
+    if seg1 == "health" {
+        if method == "GET" { return handle_health(req); }
+        return json_err(405, "Method not allowed");
+    }
+
+    // ── /tasks and /tasks/:id ────────────────────────────────
+    if seg1 == "tasks" {
+
+        // Collection routes: /tasks
+        if seg2 == "" {
+            if method == "GET"  { return handle_list_tasks(req); }
+            if method == "POST" { return handle_create_task(req); }
+            return json_err(405, "Method not allowed");
+        }
+
+        // Item routes: /tasks/:id  (seg2 holds the id string)
+        task_id = int(seg2);
+        if method == "GET"    { return handle_get_task(req, task_id); }
+        if method == "PUT"    { return handle_update_task(req, task_id); }
+        if method == "DELETE" { return handle_delete_task(req, task_id); }
+        return json_err(405, "Method not allowed");
+    }
+
+    // ── Catch-all 404 ────────────────────────────────────────
+    return json_err(404, "Endpoint not found");
+}
+
+// ─── Boot ─────────────────────────────────────────────────────
+
+print("=== Task Manager API — UniLang Backend ===");
+print("Demonstrates: SQLite persistence + REST routing + JSON I/O");
+init_db();
+print("Starting server on http://localhost:8080");
+serve(8080, router);

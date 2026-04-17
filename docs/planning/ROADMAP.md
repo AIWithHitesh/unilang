@@ -12,7 +12,7 @@ Phase 0: Foundation        █████████████████�
 Phase 1: Core Compiler     ████████████████████  [Complete ✓]
 Phase 2: Runtime & VM      ████████████████████  [Complete ✓]
 Phase 3: Toolchain         ██████████░░░░░░░░░░  [In Progress]
-Phase 4: IDE & Ecosystem   ████████████░░░░░░░░  [In Progress]
+Phase 4: IDE & Ecosystem   ████████████████░░░░  [Mostly Complete]
 Phase 5: Production Ready  ░░░░░░░░░░░░░░░░░░░░
 ```
 
@@ -220,18 +220,18 @@ Phase 5: Production Ready  ░░░░░░░░░░░░░░░░░�
 | Task | Status | Notes |
 |------|--------|-------|
 | Language tutorial / Quick Start | ✅ Done | `docs/guides/QUICKSTART.md` |
-| API reference (stdlib) | 🔲 TODO | Full function reference |
+| API reference (stdlib) | ✅ Done | `docs/guides/API_REFERENCE.md` — 113 functions, all modules, examples |
 | Driver reference | ✅ Done | `docs/DRIVERS.md` |
 | Community driver contribution guide | ✅ Done | `CONTRIBUTING_DRIVERS.md` — auto-discovery walkthrough + template |
 | Compiler pipeline docs | ✅ Done | `docs/architecture/COMPILER_PIPELINE.md` |
 | Example: ML framework | ✅ Done | `examples/ml-framework/` — custom Tensor, layers, UniNN |
 | Example: Library management | ✅ Done | `examples/library-mgmt/` — REST API, 10K books, ML predictions |
 | Example: SHYNX e-commerce | ✅ Done | `examples/ecommerce/` — SQLite + Redis + Kafka + AI recs |
-| Example: Web service | 🔲 TODO | Simple REST-only starter project |
-| Example: Data processing | 🔲 TODO | Multi-threaded ETL |
-| Cookbook / recipes | 🔲 TODO | Common patterns (auth, pagination, caching) |
-| Migration guide (Java → UniLang) | 🔲 TODO | |
-| Migration guide (Python → UniLang) | 🔲 TODO | |
+| Example: Web service | ✅ Done | `examples/web-service/` — task management REST API, SQLite, 7 endpoints |
+| Example: Data processing | ✅ Done | `examples/data-pipeline/` — ETL pipeline, CSV parse, SQLite load, aggregates |
+| Cookbook / recipes | ✅ Done | `docs/guides/COOKBOOK.md` — 8 recipes: auth, pagination, caching, rate limiting, Kafka jobs, validation, error middleware, env config |
+| Migration guide (Java → UniLang) | ✅ Done | `docs/guides/MIGRATION_JAVA.md` — syntax table, stdlib mapping, Spring Boot example |
+| Migration guide (Python → UniLang) | ✅ Done | `docs/guides/MIGRATION_PYTHON.md` — what works unchanged, stdlib mapping, Flask example |
 
 **Exit Criteria:** VS Code extension published; 3+ complete example projects. ✅
 
