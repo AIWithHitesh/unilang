@@ -1,0 +1,36 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.
+
+[package]
+name = "unilang-jupyter"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+description = "Jupyter kernel for UniLang — runs UniLang code in Jupyter notebooks"
+
+[[bin]]
+name = "unilang-jupyter"
+path = "src/main.rs"
+
+[dependencies]
+unilang-common   = { path = "../unilang-common" }
+unilang-parser   = { path = "../unilang-parser" }
+unilang-semantic = { path = "../unilang-semantic" }
+unilang-codegen  = { path = "../unilang-codegen" }
+unilang-runtime  = { path = "../unilang-runtime" }
+unilang-stdlib   = { path = "../unilang-stdlib" }
+unilang-drivers  = { path = "../unilang-drivers" }
+
+zeromq  = "0.4"
+serde   = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid    = { version = "1", features = ["v4"] }
+chrono  = "0.4"
+hmac    = "0.12"
+sha2    = "0.10"
+hex     = "0.4"
+bytes   = "1"
+tokio   = { version = "1", features = ["full"] }

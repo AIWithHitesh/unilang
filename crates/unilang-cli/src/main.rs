@@ -14,7 +14,9 @@ mod build;
 mod formatter;
 mod init;
 mod linter;
+mod native;
 mod pack;
+mod pkg;
 mod project;
 mod repl;
 mod test_runner;
@@ -128,6 +130,69 @@ enum Commands {
     },
     /// Generate unilang.lock from unilang.toml dependencies.
     Lock,
+    /// Compile a .uniL file to a standalone native binary (AOT).
+    BuildNative {
+        /// Path to the .uniL source file.
+        file: String,
+        /// Output path for the native binary (without extension).
+        #[arg(long, short)]
+        out: Option<String>,
+        /// Target triple, e.g. x86_64-unknown-linux-gnu.
+        #[arg(long)]
+        target: Option<String>,
+        /// Optimisation level: 0, 1, 2 (default), 3, s.
+        #[arg(long, default_value = "2")]
+        opt: String,
+        /// Strip debug symbols from the output binary.
+        #[arg(long)]
+        strip: bool,
+    },
+    /// Package manager — install, publish, search, and manage packages.
+    Pkg {
+        #[command(subcommand)]
+        action: PkgAction,
+    },
+}
+
+/// Sub-commands for `unilang pkg`.
+#[derive(Subcommand)]
+enum PkgAction {
+    /// Install a package from the registry.
+    Install {
+        /// Package name, optionally with version: name[@version].
+        package: String,
+        /// Target directory (default: current dir).
+        #[arg(long, default_value = ".")]
+        dir: String,
+    },
+    /// Publish the current package to the registry.
+    Publish {
+        /// Authentication token for the registry.
+        #[arg(long, env = "UNILANG_TOKEN")]
+        token: String,
+        /// Package directory (default: current dir).
+        #[arg(long, default_value = ".")]
+        dir: String,
+    },
+    /// Search the registry for packages.
+    Search {
+        /// Search query.
+        query: String,
+    },
+    /// List all packages installed in the current project.
+    List {
+        /// Project directory (default: current dir).
+        #[arg(long, default_value = ".")]
+        dir: String,
+    },
+    /// Initialise a new unilang.toml in the current directory.
+    Init {
+        /// Package name.
+        name: String,
+        /// Directory to initialise (default: current dir).
+        #[arg(long, default_value = ".")]
+        dir: String,
+    },
 }
 
 /// Sub-commands for `unilang config`.
@@ -194,6 +259,30 @@ fn main() {
             ConfigAction::Init => project::cmd_config_init(),
         },
         Commands::Lock => project::cmd_lock_generate(),
+        Commands::BuildNative {
+            file,
+            out,
+            target,
+            opt,
+            strip,
+        } => native::cmd_build_native(&file, out.as_deref(), target.as_deref(), &opt, strip),
+        Commands::Pkg { action } => match action {
+            PkgAction::Install { package, dir } => {
+                pkg::cmd_install(&package, &dir);
+            }
+            PkgAction::Publish { token, dir } => {
+                pkg::cmd_publish(&dir, &token);
+            }
+            PkgAction::Search { query } => {
+                pkg::cmd_search(&query);
+            }
+            PkgAction::List { dir } => {
+                pkg::cmd_list(&dir);
+            }
+            PkgAction::Init { name, dir } => {
+                pkg::cmd_init(&name, &dir);
+            }
+        },
     }
 }
 

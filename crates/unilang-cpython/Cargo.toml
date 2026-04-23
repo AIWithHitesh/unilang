@@ -1,0 +1,21 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.
+
+[package]
+name = "unilang-cpython"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "CPython bridge — call Python libraries from UniLang via PyO3"
+
+[dependencies]
+unilang-runtime = { path = "../unilang-runtime" }
+serde_json = "1"
+# pyo3 optional — requires Python dev headers
+pyo3 = { version = "0.22", features = ["auto-initialize"], optional = true }
+
+[features]
+default = []
+cpython = ["dep:pyo3"]

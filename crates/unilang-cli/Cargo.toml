@@ -19,6 +19,8 @@ unilang-codegen = { path = "../unilang-codegen" }
 unilang-runtime = { path = "../unilang-runtime" }
 unilang-stdlib = { path = "../unilang-stdlib" }
 unilang-drivers = { path = "../unilang-drivers" }
+unilang-native = { path = "../unilang-native" }
+unilang-pkg = { path = "../unilang-pkg" }
 clap.workspace = true
 dialoguer = "0.11"
 console = "0.15"

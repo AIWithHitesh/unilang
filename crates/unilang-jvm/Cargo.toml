@@ -1,0 +1,16 @@
+# Licensed to the Apache Software Foundation (ASF) under one
+# or more contributor license agreements.  See the NOTICE file
+# distributed with this work for additional information
+# regarding copyright ownership.
+
+[package]
+name = "unilang-jvm"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "UniLang JVM bytecode emitter — compile UniLang to .class files"
+
+[dependencies]
+unilang-parser = { path = "../unilang-parser" }
+unilang-semantic = { path = "../unilang-semantic" }
+unilang-common = { path = "../unilang-common" }
